@@ -4,15 +4,19 @@
 
 **Version:** 1.0
 
-**Status:** In progress — documentation stages 00 through 06, the runnable
-project foundation, and the tested connector SDK are complete; repository
-policy and licensing remain owner decisions
+**Status:** In progress — specifications 00 through 06 are validated;
+foundation is `27/30`, Connector SDK is `5/11`, and end-to-end MVP acceptance
+is `0/11`. See [`IMPLEMENTATION_STATUS.md`](IMPLEMENTATION_STATUS.md) for
+evidence, missing features, and active backfill order.
 
 ---
 
 # Overview
 
 This document is the master implementation roadmap for Universal AI Search.
+
+Checkboxes describe implemented production work only. Specification completion
+is tracked separately in [`IMPLEMENTATION_STATUS.md`](IMPLEMENTATION_STATUS.md).
 
 Every feature in the system is broken into small, verifiable tasks.
 

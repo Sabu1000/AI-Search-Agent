@@ -1,6 +1,11 @@
 # Universal AI Search — Documentation Pack
 
-This folder is the implementation blueprint for a deployable AI search product that lets users connect local files, Gmail, Google Drive, and GitHub, then search and ask questions across those sources with citations.
+This folder is the implementation blueprint for a deployable AI search product
+that lets users connect local files, Gmail, Google Drive, and GitHub, then
+search and ask questions across those sources with citations. A validated
+document is a completed specification, not proof that its described product
+feature is implemented. The evidence-based product status is maintained in
+[`IMPLEMENTATION_STATUS.md`](IMPLEMENTATION_STATUS.md).
 
 ## Implementation order
 
@@ -45,13 +50,19 @@ The product is read-only in version 1. Retrieved content is untrusted data and c
 
 ## Stage workflow
 
-Implement the numbered documents in order. Before moving to the next document:
+Specify the numbered documents in order. Implement production slices in the
+dependency order recorded by [`IMPLEMENTATION_STATUS.md`](IMPLEMENTATION_STATUS.md).
+Before moving to the next checkpoint:
 
 1. Convert the current document into explicit acceptance criteria.
-2. Implement its requirements without pulling later features forward unless they are prerequisites.
-3. Add and run automated tests and relevant manual checks.
-4. Update the documentation and [`MASTER-TASK-LIST.md`](MASTER-TASK-LIST.md).
-5. Review the complete diff, commit and push the finished stage under the
+2. Mark every requirement as specification-complete, partial, implemented, or
+   not started with file/test evidence.
+3. Implement dependency-safe requirements without claiming that an interface,
+   fake, document, or application shell is the finished feature.
+4. Add and run automated tests and relevant manual checks.
+5. Update the documentation, [`IMPLEMENTATION_STATUS.md`](IMPLEMENTATION_STATUS.md),
+   and [`MASTER-TASK-LIST.md`](MASTER-TASK-LIST.md).
+6. Review the complete diff, commit and push the finished checkpoint under the
    repository owner's current authorization, then check in before starting the
    next document.
 
@@ -71,4 +82,5 @@ for production images, scanning, and deployment.
 - A root `README.md` explains the product, status, workflow, and Docker plan.
 - Every numbered document from `00` through `20` exists.
 - The implementation-order links resolve to local files.
+- Specification and implementation status are explicitly separated and linked.
 - `./scripts/validate-docs.sh` passes.

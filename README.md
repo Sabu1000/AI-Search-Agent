@@ -4,21 +4,33 @@ Universal AI Search is a read-only search and question-answering product for
 local files, Gmail, Google Drive, and GitHub. It combines keyword and vector
 search, then returns grounded answers with links back to the original sources.
 
-The repository is being built incrementally from the specifications in
+The repository is being specified and built incrementally from the documents in
 [`universal_ai_search_documentation/`](universal_ai_search_documentation/00_README.md).
-Only one numbered document is implemented at a time. A stage is complete only
-after its implementation, tests, and documentation all pass review.
+Numbered-document completion and product-feature completion are tracked
+separately so a validated design is never presented as working product code.
 
 ## Current status
 
-- Completed stages: `00_README.md` through `06_CONNECTOR_FRAMEWORK.md`
-- Next stage: `07_INDEXING_PIPELINE.md`
+- Specification status: `00_README.md` through `06_CONNECTOR_FRAMEWORK.md` are
+  validated
+- Implementation status: foundation is partial (`27/30` master tasks), the
+  Connector SDK is partial (`5/11` master tasks), and end-to-end MVP acceptance
+  is `0/11`
+- Backfill status: truthful tracking checkpoint `B0` is complete; database
+  runtime `B1` is next
+- Next specification: `07_INDEXING_PIPELINE.md`, paused until database/API
+  prerequisites are backfilled
 - Product status: tested project foundation plus an implemented Python
   connector SDK with strict provider models, idempotent change streams, retry
   handling, runtime validation, a registry, and a contract-test kit; search,
   database, and public API behavior are specified but not yet implemented
 - Safety boundary: version 1 is read-only; retrieved content is untrusted data
   and cannot trigger actions
+
+See the
+[implementation status ledger](universal_ai_search_documentation/IMPLEMENTATION_STATUS.md)
+for requirement-by-requirement evidence, explicit missing features, and the
+dependency-ordered backfill sequence.
 
 ## MVP
 
@@ -34,17 +46,19 @@ The MVP will provide:
 See the [project specification](universal_ai_search_documentation/01_PROJECT_SPEC.md)
 for the complete requirements and measurable success criteria.
 
-## Documentation-driven workflow
+## Specification and implementation workflow
 
-The numbered documents are the source of truth and are implemented in order.
-For each stage:
+The numbered documents are the design source of truth and are specified in
+order. Production work follows executable dependencies recorded in the status
+ledger. For every design or implementation checkpoint:
 
 1. Read the stage and its referenced dependencies.
 2. Turn its requirements into concrete acceptance criteria.
-3. Implement only that stage's approved scope.
-4. Run its automated tests, linters, and relevant manual checks.
-5. Update documentation and the master task list.
-6. Review the diff, commit the completed stage, and push it before continuing.
+3. Record whether each item is design-only, partial, or implemented.
+4. Implement only the dependency-safe approved scope.
+5. Run its automated tests, linters, and relevant manual checks.
+6. Update the status ledger, documentation, and master task list.
+7. Review the diff, commit the checkpoint, and push it before continuing.
 
 ## Local development
 
@@ -79,7 +93,7 @@ Run documentation, formatting, lint, type, and unit checks with:
 pnpm check
 ```
 
-Run the containerized backend and desktop Rust checks with:
+Run the containerized Python and desktop Rust checks with:
 
 ```sh
 ./scripts/test-backend.sh

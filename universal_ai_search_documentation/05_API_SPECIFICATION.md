@@ -1,5 +1,10 @@
 # API Specification
 
+> **Implementation status:** Specification complete; `0/49` catalogued `/v1`
+> product endpoints are implemented. Existing liveness/readiness routes are
+> foundation endpoints outside this catalog. See
+> [`IMPLEMENTATION_STATUS.md`](IMPLEMENTATION_STATUS.md).
+
 ## Goals and ownership
 
 The API is the only public cloud boundary for web and desktop clients. It

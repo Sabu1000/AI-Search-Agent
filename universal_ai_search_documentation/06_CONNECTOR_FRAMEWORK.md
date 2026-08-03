@@ -1,5 +1,10 @@
 # Connector Framework
 
+> **Implementation status:** The shared Connector SDK scope is implemented and
+> tested. The wider connector phase is partial (`5/11` master tasks), and no
+> real Gmail, Drive, GitHub, or local-file provider connector exists yet. See
+> [`IMPLEMENTATION_STATUS.md`](IMPLEMENTATION_STATUS.md).
+
 ## Goals and ownership
 
 The connector framework gives Gmail, Google Drive, GitHub, and the desktop

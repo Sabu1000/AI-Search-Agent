@@ -1,5 +1,10 @@
 # Project Specification
 
+> **Implementation status:** Specification complete; end-to-end MVP acceptance
+> is currently `0/11`. This document defines whole-product outcomes rather than
+> claiming they are already built. See
+> [`IMPLEMENTATION_STATUS.md`](IMPLEMENTATION_STATUS.md).
+
 ## Product name
 
 Universal AI Search

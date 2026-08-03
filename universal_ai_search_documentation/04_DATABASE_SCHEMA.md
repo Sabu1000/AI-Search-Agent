@@ -1,5 +1,10 @@
 # Database Schema
 
+> **Implementation status:** Specification complete; `0/33` specified tables
+> currently have application migrations. PostgreSQL/pgvector initialization is
+> foundation only. See
+> [`IMPLEMENTATION_STATUS.md`](IMPLEMENTATION_STATUS.md).
+
 ## Goals and ownership
 
 PostgreSQL is the durable source of truth for identity, workspace membership,

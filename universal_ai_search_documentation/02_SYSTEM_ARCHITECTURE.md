@@ -1,5 +1,10 @@
 # System Architecture
 
+> **Implementation status:** Specification complete; runtime implementation is
+> partial. Application/process shells and local dependencies exist, while the
+> durable product services remain unimplemented. See
+> [`IMPLEMENTATION_STATUS.md`](IMPLEMENTATION_STATUS.md).
+
 ## Architecture goals
 
 The system must provide tenant-safe retrieval, reliable background ingestion,

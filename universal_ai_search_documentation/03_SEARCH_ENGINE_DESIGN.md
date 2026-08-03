@@ -1,5 +1,9 @@
 # Search Engine Design
 
+> **Implementation status:** Specification complete; search engine production
+> code is not started. See
+> [`IMPLEMENTATION_STATUS.md`](IMPLEMENTATION_STATUS.md).
+
 ## Goals and scope
 
 The search engine retrieves only the current workspace's indexed, authorized
