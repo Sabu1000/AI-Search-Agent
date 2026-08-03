@@ -22,6 +22,7 @@ for required_file in \
   packages/connector-sdk/pyproject.toml \
   infrastructure/docker/backend.Dockerfile \
   infrastructure/docker/connector-sdk-test.Dockerfile \
+  infrastructure/docker/database-test.Dockerfile \
   infrastructure/docker/desktop-test.Dockerfile \
   infrastructure/docker/postgres-init/001-extensions.sql \
   infrastructure/docker/web.Dockerfile \

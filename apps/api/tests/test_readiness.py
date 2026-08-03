@@ -42,6 +42,9 @@ async def test_check_readiness_reports_all_dependencies(
 
 async def test_database_probe_executes_query_and_disposes_engine() -> None:
     connection = AsyncMock()
+    result = MagicMock()
+    result.scalar_one.return_value = "0001_initial_schema"
+    connection.execute.return_value = result
     connection_context = MagicMock()
     connection_context.__aenter__ = AsyncMock(return_value=connection)
     connection_context.__aexit__ = AsyncMock(return_value=None)
@@ -56,6 +59,30 @@ async def test_database_probe_executes_query_and_disposes_engine() -> None:
         await _probe_database(Settings(environment="test"))
 
     connection.execute.assert_awaited_once()
+    engine.dispose.assert_awaited_once()
+
+
+async def test_database_probe_rejects_incompatible_schema() -> None:
+    connection = AsyncMock()
+    result = MagicMock()
+    result.scalar_one.return_value = "old_revision"
+    connection.execute.return_value = result
+    connection_context = MagicMock()
+    connection_context.__aenter__ = AsyncMock(return_value=connection)
+    connection_context.__aexit__ = AsyncMock(return_value=None)
+    engine = MagicMock()
+    engine.connect.return_value = connection_context
+    engine.dispose = AsyncMock()
+
+    with (
+        patch(
+            "universal_ai_search.platform.readiness.create_async_engine",
+            return_value=engine,
+        ),
+        pytest.raises(RuntimeError, match="schema revision"),
+    ):
+        await _probe_database(Settings(environment="test"))
+
     engine.dispose.assert_awaited_once()
 
 

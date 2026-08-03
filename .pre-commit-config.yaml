@@ -20,7 +20,7 @@ repos:
         files: \.(js|mjs|ts|tsx)$
       - id: backend-quality
         name: Python formatting, lint, and type checks
-        entry: sh -c 'cd apps/api && black --check src tests && ruff check src tests && mypy src'
+        entry: sh -c 'cd apps/api && black --check src tests migrations tests_database && ruff check src tests migrations tests_database && mypy src migrations tests_database'
         language: system
         pass_filenames: false
         files: ^apps/api/.*\.py$

@@ -8,10 +8,12 @@ version = "0.1.0"
 description = "API and worker processes for Universal AI Search."
 requires-python = ">=3.12,<3.13"
 dependencies = [
+  "alembic>=1.16,<2",
   "asyncpg>=0.30,<1",
   "fastapi>=0.116,<1",
   "httpx>=0.28,<1",
   "pydantic-settings>=2.10,<3",
+  "psycopg[binary]>=3.2,<4",
   "redis>=6.2,<7",
   "sqlalchemy[asyncio]>=2.0,<3",
   "uvicorn[standard]>=0.35,<1",
@@ -30,6 +32,7 @@ dev = [
 
 [project.scripts]
 universal-ai-search-worker = "universal_ai_search.worker.main:run"
+universal-ai-search-schema = "universal_ai_search.database.schema:run"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/universal_ai_search"]

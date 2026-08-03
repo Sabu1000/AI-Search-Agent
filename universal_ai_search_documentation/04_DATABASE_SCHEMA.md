@@ -1,8 +1,9 @@
 # Database Schema
 
-> **Implementation status:** Specification complete; `0/33` specified tables
-> currently have application migrations. PostgreSQL/pgvector initialization is
-> foundation only. See
+> **Implementation status:** Specification complete; `33/33` specified tables
+> are created by Alembic revision `0001_initial_schema`, with constraints,
+> workload indexes, forced RLS, and PostgreSQL integration tests. Repository
+> and product-service code remains future work. See
 > [`IMPLEMENTATION_STATUS.md`](IMPLEMENTATION_STATUS.md).
 
 ## Goals and ownership
@@ -21,9 +22,10 @@ chunk production to [`07_INDEXING_PIPELINE.md`](07_INDEXING_PIPELINE.md), and
 retention policy durations to
 [`08_SECURITY_AND_PRIVACY.md`](08_SECURITY_AND_PRIVACY.md).
 
-The schema is designed now; SQLAlchemy models and Alembic migrations are
-implemented in the database phase after the dependent contracts are complete.
-No application feature may create an unreviewed table outside this catalog.
+The schema is implemented as a reviewed Alembic SQL migration. Repository and
+transaction-service code will be added with the product slices that use each
+table. No application feature may create an unreviewed table outside this
+catalog.
 
 ## Extensions and database baseline
 
@@ -227,7 +229,8 @@ scheduled privacy job.
 | Column | Type and rules |
 | --- | --- |
 | `id` | UUID primary key |
-| `workspace_id`, `owner_user_id` | Composite FK to workspace membership |
+| `workspace_id` | FK to workspace; deleting a workspace cascades its connections |
+| `workspace_id`, `owner_user_id` | Deferred composite FK to workspace membership; an owner cannot be removed while still owning a connection |
 | `provider` | TEXT check `google`, `github`, `local_files` |
 | `external_account_id_hash` | BYTEA null; unique with workspace and provider while active |
 | `display_label` | TEXT not null, user-safe and bounded |
@@ -380,8 +383,8 @@ supports deterministic person filters without searching arbitrary JSON.
 
 | Column | Type and rules |
 | --- | --- |
-| `workspace_id`, `source_id` | Composite FK to `sources`, cascade |
-| `collection_id` | UUID FK to a same-workspace, same-connection collection |
+| `workspace_id`, `connection_id`, `source_id` | Composite FK to `sources`, cascade |
+| `collection_id` | UUID with composite FK to a same-workspace, same-connection collection |
 | `relationship` | TEXT check `direct`, `ancestor` |
 
 The primary key is `(source_id, collection_id)`. Materialized ancestor rows make

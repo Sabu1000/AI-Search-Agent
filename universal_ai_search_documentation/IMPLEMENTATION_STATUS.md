@@ -2,7 +2,8 @@
 
 **Last audited:** 2026-08-03
 
-**Audited commit:** `2b07d50`
+**Audited baseline:** `a736841`; this ledger includes the current `B1`
+checkpoint.
 
 **Purpose:** Separate validated design specifications from working product
 features and keep an evidence-based record of the next implementation step.
@@ -27,9 +28,9 @@ shells are never counted as finished user features.
 | --- | --- | --- | --- |
 | `00_README.md` | Complete | Partial foundation | Monorepo, CI, Docker Compose, web/API/worker/desktop shells, shared packages, and quality gates work. Branch protection, a license decision, and the Phase 1 review remain open. |
 | `01_PROJECT_SPEC.md` | Complete | Not started as an MVP | The 11 MVP requirements have testable acceptance criteria, but none passes end to end. See the requirement audit below. |
-| `02_SYSTEM_ARCHITECTURE.md` | Complete | Partial | Process shells and local dependencies exist. Durable workflows, repositories, authorization enforcement, queues, connector orchestration, indexing, search, and answer services do not. |
+| `02_SYSTEM_ARCHITECTURE.md` | Complete | Partial | Process shells, local dependencies, schema migration ordering, and revision-aware API readiness exist. Durable repositories, authorization services, queues, connector orchestration, indexing, search, and answer services do not. |
 | `03_SEARCH_ENGINE_DESIGN.md` | Complete | Not started | No lexical retrieval, vector retrieval, fusion, reranking, context builder, citation builder, grounding evaluator, or search endpoint exists. |
-| `04_DATABASE_SCHEMA.md` | Complete | Not started | PostgreSQL/pgvector starts and extensions initialize, but there is no migration framework, no application tables, no RLS policy, no seed path, and no migration test. Current count: `0/33` specified tables. |
+| `04_DATABASE_SCHEMA.md` | Complete | Database runtime implemented; phase partial | Alembic revision `0001_initial_schema` creates `33/33` specified tables, constraints, indexes, roles, grants, and forced RLS. Compose migrates before API startup; readiness checks the revision; 11 PostgreSQL integration tests cover catalog, lifecycle, and tenant isolation. Seed data, repositories, backup automation, and the Phase 3 review remain. |
 | `05_API_SPECIFICATION.md` | Complete | Not started | FastAPI exposes liveness/readiness only. None of the `49` catalogued `/v1` product endpoints is implemented. Shared auth, problem details, idempotency, pagination, rate limiting, and SSE behavior also remain. |
 | `06_CONNECTOR_FRAMEWORK.md` | Complete | SDK implemented; provider ecosystem partial | The typed SDK, four change variants, registry, retry policy, runtime stream validator, fake connector, Docker gate, and CI job are implemented. Real Gmail, Drive, GitHub, and local-file connectors, OAuth persistence, scheduling, logging, and metrics are not. |
 
@@ -41,17 +42,17 @@ the next specification without being the next safe implementation task.
 
 | Requirement | Status | Implemented evidence | Missing acceptance path |
 | --- | --- | --- | --- |
-| `AUTH-001` | Not started | None | User persistence, password hashing, sessions/tokens, register/login/logout UI and APIs, safe errors, and end-to-end tests. |
+| `AUTH-001` | Partial | User, identity, one-time-token, session, workspace, and membership tables now exist behind forced RLS. | Password hashing, session services, register/login/logout UI and APIs, safe errors, and end-to-end tests. |
 | `DESKTOP-001` | Partial | Tauri React/Rust shell compiles and is container-checked. | Signed installers, folder selection, root authorization, scanner/watcher, device registration, offline queue, removal/deletion flow, and platform tests. |
 | `GOOGLE-001` | Not started | Canonical SDK provider contracts only. | OAuth scopes/callbacks, encrypted credentials, Gmail and Drive clients, selections, full/incremental sync, revocation, UI, and provider contract tests. |
 | `GITHUB-001` | Not started | Canonical SDK provider contract only. | GitHub App, installation/repository selection, API client, webhooks, reconciliation, access removal, UI, and provider contract tests. |
 | `SYNC-001` | Partial | SDK defines deterministic changes, retry classes, terminal cursors, health results, and contract tests. | Durable jobs/cursors, scheduler, worker integration, status APIs/UI, sanitized persisted errors, replay tests, and operational metrics. |
-| `SEARCH-001` | Not started | Search behavior is specified only. | Authorized FTS/vector retrieval, filters, fusion/ranking, API, UI states, evaluation data, and isolation tests. |
+| `SEARCH-001` | Partial | Immutable source/version/chunk storage plus generated FTS, trigram, filtered metadata, and HNSW vector indexes exist. | Authorized retrieval repositories, filters, fusion/ranking, API, UI states, evaluation data, and search-level isolation tests. |
 | `ANSWER-001` | Not started | Answer/grounding behavior is specified only. | Model gateway, context construction, streaming generation, claim support checks, insufficient-evidence behavior, UI, and evaluation. |
-| `CITATION-001` | Not started | Citation shape and behavior are specified only. | Stored source spans, citation builder, authorization recheck, safe target opening, API/UI rendering, and correctness tests. |
-| `CONNECTION-001` | Not started | SDK has deletion and permission-change event types. | Connection storage, credential revocation, sync cancellation, cascade jobs, progress API/UI, 24-hour enforcement, and end-to-end tests. |
-| `ACCOUNT-001` | Not started | Database/API deletion contracts are specified only. | Immediate access termination, durable deletion workflow, receipt/status, export, backup-retention handling, and deadline alerts/tests. |
-| `SAFETY-001` | Partial | Product and SDK are structurally read-only; SDK validates URLs/JSON and masks credentials. | Authorization middleware, tenant/RLS enforcement, content sanitization boundaries, prompt-injection fixtures through retrieval/answering, log redaction, and cross-user tests. |
+| `CITATION-001` | Partial | Claim and citation tables enforce same-workspace message/source/version/chunk lineage. | Citation builder, authorization recheck, safe target opening, API/UI rendering, and correctness tests. |
+| `CONNECTION-001` | Partial | Connection, scope, cursor, deletion, job, and outbox storage exists; the SDK has deletion and permission-change events. | Credential services, revocation, sync cancellation, cascade workers, progress API/UI, 24-hour enforcement, and end-to-end tests. |
+| `ACCOUNT-001` | Partial | Workspace state and durable deletion-request/job/outbox/audit storage exist. | Immediate access-termination service, cascade workers, receipt/status, export, backup-retention handling, and deadline alerts/tests. |
+| `SAFETY-001` | Partial | Product and SDK are structurally read-only; SDK validates URLs/JSON and masks credentials; all identity and tenant tables use forced, fail-closed RLS tested with non-bypass roles. | Authorization middleware, content sanitization boundaries, prompt-injection fixtures through retrieval/answering, log redaction, and full cross-user service tests. |
 
 Current end-to-end MVP acceptance: `0/11` requirements. Partial means useful
 prerequisite code exists; it does not increase the end-to-end count.
@@ -93,12 +94,33 @@ Connector SDK master tasks complete: `5/11`: `P4-001`, `P4-004`, `P4-006`,
 `P4-007`, and `P4-008`. OAuth management, token storage, scheduling, production
 logging, metrics, and the Phase 4 review remain open.
 
+### Database runtime
+
+- Alembic migration CLI and revision `0001_initial_schema` create and version
+  all `33/33` application tables in the `app` schema.
+- PostgreSQL `citext`, `pg_trgm`, and pgvector types support identity, lexical,
+  trigram, and vector workloads.
+- Named checks, composite tenant foreign keys, immutable-version lineage, queue
+  indexes, generated `TSVECTOR`, and an HNSW `VECTOR(1536)` index are present.
+- `app_api`, `app_worker`, and `app_audit_reader` are non-login,
+  non-`BYPASSRLS` roles. Identity and tenant tables use forced, fail-closed RLS.
+- Compose runs migrations to completion before starting the API, and readiness
+  rejects any revision other than `0001_initial_schema`.
+- An ephemeral PostgreSQL 16/pgvector Docker suite runs Python quality gates
+  and `11` catalog, migration-lifecycle, foreign-key, and tenant-isolation
+  tests in CI.
+
+Database master tasks complete: `12/15`: `P3-001` through `P3-012`. Seed data,
+backup implementation, and the Phase 3 review remain open. These tables are
+production schema, but they do not by themselves implement repositories or
+user-visible workflows.
+
 ## Explicitly unimplemented inventory
 
 The following do not exist in production code yet:
 
-- Application database migrations, SQLAlchemy models/repositories, RLS
-  policies, or seed data.
+- SQLAlchemy models/repositories, transaction services, or seed data for the
+  migrated schema.
 - Account registration, login, sessions, authorization middleware, OAuth, or
   encrypted provider credential storage.
 - Any real provider client or provider data synchronization.
@@ -127,10 +149,9 @@ define design ownership:
 | `B6` | Stage 03 search implementation | Tenant-safe FTS/vector retrieval, fusion, filters, ranking, context, citations, API, and evaluation tests. |
 | `B7` | Real provider and desktop slices | Google, GitHub, then local desktop behavior, each certified by the Connector SDK suite and integrated end to end. |
 
-The active backfill item is always the first unfinished row. Backfill `B0` is
-complete with this tracked checkpoint, and `B1` is next. No later slice may be
-reported complete because a model, interface, fake, document, or application
-shell exists.
+The active backfill item is always the first unfinished row. Backfills `B0` and
+`B1` are complete; `B2` is next. No later slice may be reported complete
+because a model, interface, fake, document, or application shell exists.
 
 ## Evidence commands
 
@@ -141,6 +162,7 @@ pnpm check
 pnpm build
 ./scripts/test-backend.sh
 ./scripts/test-connector-sdk.sh
+./scripts/test-database.sh
 ./scripts/test-desktop-rust.sh
 docker compose build api web
 ```

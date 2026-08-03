@@ -6,6 +6,10 @@ repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 schema="$repository_root/universal_ai_search_documentation/04_DATABASE_SCHEMA.md"
 project_specification="$repository_root/universal_ai_search_documentation/01_PROJECT_SPEC.md"
 postgres_init="$repository_root/infrastructure/docker/postgres-init/001-extensions.sql"
+migration_revision="$repository_root/apps/api/migrations/versions/0001_initial_schema.py"
+migration_sql="$repository_root/apps/api/migrations/sql/0001_initial_schema.sql"
+migration_down_sql="$repository_root/apps/api/migrations/sql/0001_initial_schema_down.sql"
+database_test_script="$repository_root/scripts/test-database.sh"
 
 if [ ! -f "$schema" ]; then
   printf '%s\n' 'ERROR: 04_DATABASE_SCHEMA.md is missing.' >&2
@@ -230,6 +234,67 @@ else
       failures=$((failures + 1))
     fi
   done
+fi
+
+for runtime_artifact in \
+  "$repository_root/apps/api/alembic.ini" \
+  "$migration_revision" \
+  "$migration_sql" \
+  "$migration_down_sql" \
+  "$repository_root/compose.database-test.yaml" \
+  "$repository_root/infrastructure/docker/database-test.Dockerfile" \
+  "$database_test_script"
+do
+  if [ ! -f "$runtime_artifact" ]; then
+    printf 'ERROR: database runtime artifact is missing: %s\n' "$runtime_artifact" >&2
+    failures=$((failures + 1))
+  fi
+done
+
+if [ -f "$migration_sql" ]; then
+  for table in \
+    users auth_identities one_time_tokens sessions workspaces workspace_members \
+    oauth_transactions connections connection_scopes connection_cursors \
+    source_collections devices device_folders provider_events sources \
+    source_people source_collection_memberships document_versions chunks \
+    embedding_profiles chunk_embeddings search_requests conversations messages \
+    message_claims citations api_idempotency_keys jobs job_attempts outbox_events \
+    deletion_requests workspace_usage audit_events
+  do
+    migration_count=$(grep -Ec "^CREATE TABLE app\.$table \(" "$migration_sql" || true)
+    if [ "$migration_count" -ne 1 ]; then
+      printf 'ERROR: migration must create table %s exactly once; found %s.\n' \
+        "$table" "$migration_count" >&2
+      failures=$((failures + 1))
+    fi
+  done
+
+  for runtime_behavior in \
+    'CREATE ROLE app_api NOLOGIN NOSUPERUSER NOBYPASSRLS' \
+    'CREATE ROLE app_worker NOLOGIN NOSUPERUSER NOBYPASSRLS' \
+    'FORCE ROW LEVEL SECURITY' \
+    'VECTOR(1536)' \
+    'USING HNSW' \
+    'ON DELETE NO ACTION DEFERRABLE INITIALLY DEFERRED'
+  do
+    if ! grep -Fq "$runtime_behavior" "$migration_sql"; then
+      printf 'ERROR: initial migration is missing behavior: %s\n' \
+        "$runtime_behavior" >&2
+      failures=$((failures + 1))
+    fi
+  done
+fi
+
+if [ -f "$migration_revision" ] && \
+   ! grep -Fq 'revision = "0001_initial_schema"' "$migration_revision"; then
+  printf '%s\n' 'ERROR: initial migration revision identifier is incorrect.' >&2
+  failures=$((failures + 1))
+fi
+
+if [ -f "$migration_down_sql" ] && \
+   ! grep -Fq 'DROP SCHEMA IF EXISTS app CASCADE' "$migration_down_sql"; then
+  printf '%s\n' 'ERROR: initial migration rollback does not remove the app schema.' >&2
+  failures=$((failures + 1))
 fi
 
 if grep -Fq '<MODEL_DIMENSION>' "$schema"; then

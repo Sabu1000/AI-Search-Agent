@@ -109,18 +109,18 @@ Rules:
 
 # Phase 3 — Database
 
-- [ ] P3-001 PostgreSQL migrations
-- [ ] P3-002 Users table
-- [ ] P3-003 Connections table
-- [ ] P3-004 Sources table
-- [ ] P3-005 Documents table
-- [ ] P3-006 Chunks table
-- [ ] P3-007 Conversations table
-- [ ] P3-008 Messages table
-- [ ] P3-009 Citations table
-- [ ] P3-010 Sync jobs table
-- [ ] P3-011 Audit logs
-- [ ] P3-012 Database indexes
+- [x] P3-001 PostgreSQL migrations
+- [x] P3-002 Users table
+- [x] P3-003 Connections table
+- [x] P3-004 Sources table
+- [x] P3-005 Documents table
+- [x] P3-006 Chunks table
+- [x] P3-007 Conversations table
+- [x] P3-008 Messages table
+- [x] P3-009 Citations table
+- [x] P3-010 Sync jobs table
+- [x] P3-011 Audit logs
+- [x] P3-012 Database indexes
 - [ ] P3-013 Seed data
 - [ ] P3-014 Backup strategy
 - [ ] P3-015 Phase review

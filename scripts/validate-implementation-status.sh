@@ -59,9 +59,10 @@ done
 
 for truthful_count in \
   '0/11' \
-  '0/33' \
+  '33/33' \
   '49' \
   '27/30' \
+  '12/15' \
   '5/11' \
   '25 tests at 99% line coverage'
 do

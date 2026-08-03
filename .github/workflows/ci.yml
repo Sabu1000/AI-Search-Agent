@@ -46,6 +46,14 @@ jobs:
       - name: Build and run connector SDK contract tests
         run: ./scripts/test-connector-sdk.sh
 
+  database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run migrations and PostgreSQL contract tests
+        run: ./scripts/test-database.sh
+
   desktop-rust:
     runs-on: ubuntu-latest
     timeout-minutes: 20

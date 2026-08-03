@@ -76,6 +76,18 @@ services:
       - "${MAILPIT_WEB_PORT:-8025}:8025"
     restart: unless-stopped
 
+  migrate:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/backend.Dockerfile
+    command: ["universal-ai-search-schema"]
+    environment:
+      UAS_DATABASE_MIGRATION_URL: ${UAS_DATABASE_MIGRATION_URL:-postgresql+psycopg://uas:change-me-local@postgres:5432/uas}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
   api:
     build:
       context: .
@@ -98,6 +110,8 @@ services:
       minio:
         condition: service_healthy
       minio-init:
+        condition: service_completed_successfully
+      migrate:
         condition: service_completed_successfully
     healthcheck:
       test:

@@ -15,6 +15,9 @@ COPY apps/api/pyproject.toml ./pyproject.toml
 COPY apps/api/src ./src
 RUN pip install --no-cache-dir .
 
+COPY apps/api/alembic.ini ./alembic.ini
+COPY apps/api/migrations ./migrations
+
 FROM base AS test
 
 COPY apps/api/tests ./tests

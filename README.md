@@ -14,16 +14,16 @@ separately so a validated design is never presented as working product code.
 - Specification status: `00_README.md` through `06_CONNECTOR_FRAMEWORK.md` are
   validated
 - Implementation status: foundation is partial (`27/30` master tasks), the
-  Connector SDK is partial (`5/11` master tasks), and end-to-end MVP acceptance
-  is `0/11`
-- Backfill status: truthful tracking checkpoint `B0` is complete; database
-  runtime `B1` is next
+  database phase is partial (`12/15` master tasks), the Connector SDK is
+  partial (`5/11` master tasks), and end-to-end MVP acceptance is `0/11`
+- Backfill status: database runtime `B1` is complete; API platform primitives
+  `B2` are next
 - Next specification: `07_INDEXING_PIPELINE.md`, paused until database/API
   prerequisites are backfilled
-- Product status: tested project foundation plus an implemented Python
-  connector SDK with strict provider models, idempotent change streams, retry
-  handling, runtime validation, a registry, and a contract-test kit; search,
-  database, and public API behavior are specified but not yet implemented
+- Product status: tested project foundation, an implemented 33-table
+  PostgreSQL schema with forced tenant RLS, and an implemented Python connector
+  SDK; repositories, product APIs, indexing, search, and user-facing features
+  remain to be built
 - Safety boundary: version 1 is read-only; retrieved content is untrusted data
   and cannot trigger actions
 
@@ -74,6 +74,10 @@ pnpm install --frozen-lockfile
 ./scripts/dev-up.sh
 ```
 
+Compose runs the Alembic migration as a one-shot service before the API starts.
+The API readiness probe also rejects a database whose revision does not match
+the application.
+
 The services are then available at:
 
 - Web application: <http://localhost:3000>
@@ -98,16 +102,17 @@ Run the containerized Python and desktop Rust checks with:
 ```sh
 ./scripts/test-backend.sh
 ./scripts/test-connector-sdk.sh
+./scripts/test-database.sh
 ./scripts/test-desktop-rust.sh
 ```
 
 ## Docker foundation
 
 Docker is part of the foundation rather than a final packaging step. Docker
-Compose runs PostgreSQL with pgvector, Redis, MinIO, Mailpit, the FastAPI
-service, and the production Next.js build. Separate test targets provide a
-repeatable Python quality suite and Tauri Rust compile check. The local topology
-is specified in
+Compose runs PostgreSQL with pgvector, the one-shot schema migrator, Redis,
+MinIO, Mailpit, the FastAPI service, and the production Next.js build. Separate
+test targets provide repeatable Python, PostgreSQL migration/RLS, and Tauri Rust
+checks. The local topology is specified in
 [`19_LOCAL_DEVELOPMENT.md`](universal_ai_search_documentation/19_LOCAL_DEVELOPMENT.md),
 while production image build, scanning, and deployment are covered by
 [`11_DEPLOYMENT_AND_INFRASTRUCTURE.md`](universal_ai_search_documentation/11_DEPLOYMENT_AND_INFRASTRUCTURE.md).

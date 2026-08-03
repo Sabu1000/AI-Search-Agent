@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from universal_ai_search import __version__
 from universal_ai_search.config import Settings
+from universal_ai_search.database.schema import EXPECTED_SCHEMA_REVISION
 
 Probe = Callable[[], Awaitable[None]]
 
@@ -25,7 +26,11 @@ async def _probe_database(settings: Settings) -> None:
     engine = create_async_engine(settings.database_url, pool_pre_ping=True)
     try:
         async with engine.connect() as connection:
-            await connection.execute(text("SELECT 1"))
+            result = await connection.execute(
+                text("SELECT version_num FROM alembic_version")
+            )
+            if result.scalar_one() != EXPECTED_SCHEMA_REVISION:
+                raise RuntimeError("Database schema revision is incompatible")
     finally:
         await engine.dispose()
 
