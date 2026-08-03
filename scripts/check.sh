@@ -8,6 +8,7 @@ repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 "$repository_root/scripts/validate-project-spec.sh"
 "$repository_root/scripts/validate-architecture.sh"
 "$repository_root/scripts/validate-search-design.sh"
+"$repository_root/scripts/validate-database-schema.sh"
 "$repository_root/scripts/validate-foundation.sh"
 
 printf '%s\n' 'All project checks passed.'
