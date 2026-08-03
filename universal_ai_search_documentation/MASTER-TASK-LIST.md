@@ -4,7 +4,7 @@
 
 **Version:** 1.0
 
-**Status:** In progress — documentation stages 00 through 02 and the runnable
+**Status:** In progress — documentation stages 00 through 03 and the runnable
 project foundation are complete; repository policy and licensing remain owner
 decisions
 

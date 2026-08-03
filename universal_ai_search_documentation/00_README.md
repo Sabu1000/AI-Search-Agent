@@ -51,7 +51,9 @@ Implement the numbered documents in order. Before moving to the next document:
 2. Implement its requirements without pulling later features forward unless they are prerequisites.
 3. Add and run automated tests and relevant manual checks.
 4. Update the documentation and [`MASTER-TASK-LIST.md`](MASTER-TASK-LIST.md).
-5. Review the complete diff and obtain approval before committing or pushing to GitHub.
+5. Review the complete diff, commit and push the finished stage under the
+   repository owner's current authorization, then check in before starting the
+   next document.
 
 The definition of done in [`15_IMPLEMENTATION_PLAN.md`](15_IMPLEMENTATION_PLAN.md)
 applies to every product feature.
