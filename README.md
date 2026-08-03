@@ -13,7 +13,8 @@ after its implementation, tests, and documentation all pass review.
 
 - Completed stages: `00_README.md` through `02_SYSTEM_ARCHITECTURE.md`
 - Next stage: `03_SEARCH_ENGINE_DESIGN.md`
-- Product status: requirements and architecture defined; pre-implementation
+- Product status: tested project foundation with runnable web, API, worker, and
+  desktop application shells
 - Safety boundary: version 1 is read-only; retrieved content is untrusted data
   and cannot trigger actions
 
@@ -41,20 +42,55 @@ For each stage:
 3. Implement only that stage's approved scope.
 4. Run its automated tests, linters, and relevant manual checks.
 5. Update documentation and the master task list.
-6. Review the diff, then commit only after explicit approval.
+6. Review the diff, commit the completed stage, and push it before continuing.
 
-Run all available project checks with:
+## Local development
+
+Prerequisites are Node.js 22, pnpm 11, and Docker Desktop with Docker Compose.
+Python 3.12 and Rust stable are needed only for host-side API and Tauri work;
+their foundation checks can also run in the supplied containers.
+
+Start the complete local stack with:
 
 ```sh
-./scripts/check.sh
+cp .env.example .env
+pnpm install --frozen-lockfile
+./scripts/dev-up.sh
 ```
 
-## Docker plan
+The services are then available at:
 
-Docker starts in the project-foundation milestone, not at the end of the build.
-The foundation stage will add Docker Compose for PostgreSQL with pgvector,
-Redis, MinIO, and a test mail server, plus repeatable application builds. The
-local topology is specified in
+- Web application: <http://localhost:3000>
+- API readiness: <http://localhost:8000/health/ready>
+- MinIO console: <http://localhost:9001>
+- Mailpit: <http://localhost:8025>
+
+Stop the stack without deleting its named volumes with:
+
+```sh
+./scripts/dev-down.sh
+```
+
+Run documentation, formatting, lint, type, and unit checks with:
+
+```sh
+pnpm check
+```
+
+Run the containerized backend and desktop Rust checks with:
+
+```sh
+./scripts/test-backend.sh
+./scripts/test-desktop-rust.sh
+```
+
+## Docker foundation
+
+Docker is part of the foundation rather than a final packaging step. Docker
+Compose runs PostgreSQL with pgvector, Redis, MinIO, Mailpit, the FastAPI
+service, and the production Next.js build. Separate test targets provide a
+repeatable Python quality suite and Tauri Rust compile check. The local topology
+is specified in
 [`19_LOCAL_DEVELOPMENT.md`](universal_ai_search_documentation/19_LOCAL_DEVELOPMENT.md),
 while production image build, scanning, and deployment are covered by
 [`11_DEPLOYMENT_AND_INFRASTRUCTURE.md`](universal_ai_search_documentation/11_DEPLOYMENT_AND_INFRASTRUCTURE.md).

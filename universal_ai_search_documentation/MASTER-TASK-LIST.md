@@ -4,7 +4,9 @@
 
 **Version:** 1.0
 
-**Status:** In progress — documentation stages 00 through 02 complete
+**Status:** In progress — documentation stages 00 through 02 and the runnable
+project foundation are complete; repository policy and licensing remain owner
+decisions
 
 ---
 
@@ -29,47 +31,47 @@ Rules:
 
 ## Repository
 
-- [ ] P1-001 Create GitHub repository
+- [x] P1-001 Create GitHub repository
 - [ ] P1-002 Configure branch protection
 - [x] P1-003 Create README
 - [ ] P1-004 Add LICENSE
-- [ ] P1-005 Create CONTRIBUTING guide
-- [ ] P1-006 Create CODEOWNERS
-- [ ] P1-007 Configure issue templates
-- [ ] P1-008 Configure pull request template
+- [x] P1-005 Create CONTRIBUTING guide
+- [x] P1-006 Create CODEOWNERS
+- [x] P1-007 Configure issue templates
+- [x] P1-008 Configure pull request template
 
 ## Monorepo
 
-- [ ] P1-009 Initialize monorepo
-- [ ] P1-010 Configure pnpm workspace
-- [ ] P1-011 Create backend application
-- [ ] P1-012 Create frontend application
-- [ ] P1-013 Create desktop application
-- [ ] P1-014 Create shared packages
+- [x] P1-009 Initialize monorepo
+- [x] P1-010 Configure pnpm workspace
+- [x] P1-011 Create backend application
+- [x] P1-012 Create frontend application
+- [x] P1-013 Create desktop application
+- [x] P1-014 Create shared packages
 
 ## Development Environment
 
-- [ ] P1-015 Configure Docker Compose
-- [ ] P1-016 Configure PostgreSQL
-- [ ] P1-017 Configure Redis
-- [ ] P1-018 Configure MinIO (S3-compatible storage)
-- [ ] P1-019 Create .env.example
-- [ ] P1-020 Configure local environment
+- [x] P1-015 Configure Docker Compose
+- [x] P1-016 Configure PostgreSQL
+- [x] P1-017 Configure Redis
+- [x] P1-018 Configure MinIO (S3-compatible storage)
+- [x] P1-019 Create .env.example
+- [x] P1-020 Configure local environment
 
 ## Code Quality
 
-- [ ] P1-021 Configure Ruff
-- [ ] P1-022 Configure Black
-- [ ] P1-023 Configure ESLint
-- [ ] P1-024 Configure Prettier
-- [ ] P1-025 Configure pre-commit hooks
+- [x] P1-021 Configure Ruff
+- [x] P1-022 Configure Black
+- [x] P1-023 Configure ESLint
+- [x] P1-024 Configure Prettier
+- [x] P1-025 Configure pre-commit hooks
 
 ## Testing
 
-- [ ] P1-026 Configure pytest
-- [ ] P1-027 Configure frontend testing
-- [ ] P1-028 Configure GitHub Actions
-- [ ] P1-029 Verify Docker build
+- [x] P1-026 Configure pytest
+- [x] P1-027 Configure frontend testing
+- [x] P1-028 Configure GitHub Actions
+- [x] P1-029 Verify Docker build
 - [ ] P1-030 Phase review
 
 **Milestone:** A new developer can clone the repository and run the project locally with a single documented setup process.

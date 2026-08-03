@@ -1,0 +1,26 @@
+repos:
+  - repo: local
+    hooks:
+      - id: project-documentation
+        name: project documentation contracts
+        entry: ./scripts/check.sh
+        language: system
+        pass_filenames: false
+      - id: prettier
+        name: prettier formatting
+        entry: pnpm format:check
+        language: system
+        pass_filenames: false
+        files: \.(css|js|json|mjs|ts|tsx|yaml|yml)$
+      - id: frontend-lint
+        name: TypeScript lint and type checks
+        entry: pnpm lint
+        language: system
+        pass_filenames: false
+        files: \.(js|mjs|ts|tsx)$
+      - id: backend-quality
+        name: Python formatting, lint, and type checks
+        entry: sh -c 'cd apps/api && black --check src tests && ruff check src tests && mypy src'
+        language: system
+        pass_filenames: false
+        files: \.py$

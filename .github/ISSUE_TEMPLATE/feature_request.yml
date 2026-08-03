@@ -1,0 +1,33 @@
+name: Feature request
+description: Propose an outcome that fits the documented product scope.
+title: "feature: "
+labels: ["enhancement", "triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user problem should be solved?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: Describe observable behavior, not only an implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and alternatives
+      description: Which requirement does this support, and what alternatives were considered?
+    validations:
+      required: true
+  - type: textarea
+    id: safety
+    attributes:
+      label: Security and privacy considerations
+      description: Note any permissions, sensitive data, or write actions involved.
+    validations:
+      required: true
