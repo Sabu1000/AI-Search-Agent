@@ -23,4 +23,10 @@ repos:
         entry: sh -c 'cd apps/api && black --check src tests && ruff check src tests && mypy src'
         language: system
         pass_filenames: false
-        files: \.py$
+        files: ^apps/api/.*\.py$
+      - id: connector-sdk-quality
+        name: Connector SDK formatting, lint, and type checks
+        entry: sh -c 'cd packages/connector-sdk && black --check src tests && ruff check src tests && mypy src tests'
+        language: system
+        pass_filenames: false
+        files: ^packages/connector-sdk/.*\.py$

@@ -1,0 +1,44 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "universal-ai-search-connector-sdk"
+version = "0.1.0"
+description = "Typed connector contracts for Universal AI Search"
+requires-python = ">=3.12,<3.13"
+dependencies = ["pydantic>=2.11,<3"]
+
+[project.optional-dependencies]
+dev = [
+  "black==25.1.0",
+  "mypy==1.16.1",
+  "pytest==8.4.1",
+  "pytest-asyncio==1.1.0",
+  "pytest-cov==6.2.1",
+  "ruff==0.12.3",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/uas_connector_sdk"]
+
+[tool.black]
+line-length = 100
+target-version = ["py312"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "RUF"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+
+[tool.pytest.ini_options]
+addopts = "--cov=uas_connector_sdk --cov-report=term-missing --cov-fail-under=90"
+asyncio_mode = "auto"
+testpaths = ["tests"]

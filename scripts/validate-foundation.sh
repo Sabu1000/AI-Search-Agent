@@ -19,7 +19,9 @@ for required_file in \
   apps/desktop/src-tauri/Cargo.toml \
   packages/shared-types/package.json \
   packages/ui/package.json \
+  packages/connector-sdk/pyproject.toml \
   infrastructure/docker/backend.Dockerfile \
+  infrastructure/docker/connector-sdk-test.Dockerfile \
   infrastructure/docker/desktop-test.Dockerfile \
   infrastructure/docker/postgres-init/001-extensions.sql \
   infrastructure/docker/web.Dockerfile \

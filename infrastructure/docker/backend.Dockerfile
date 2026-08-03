@@ -7,6 +7,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+COPY packages/connector-sdk/pyproject.toml /connector-sdk/pyproject.toml
+COPY packages/connector-sdk/src /connector-sdk/src
+RUN pip install --no-cache-dir /connector-sdk
+
 COPY apps/api/pyproject.toml ./pyproject.toml
 COPY apps/api/src ./src
 RUN pip install --no-cache-dir .

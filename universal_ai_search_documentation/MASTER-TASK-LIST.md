@@ -4,9 +4,9 @@
 
 **Version:** 1.0
 
-**Status:** In progress — documentation stages 00 through 05 and the runnable
-project foundation are complete; repository policy and licensing remain owner
-decisions
+**Status:** In progress — documentation stages 00 through 06, the runnable
+project foundation, and the tested connector SDK are complete; repository
+policy and licensing remain owner decisions
 
 ---
 
@@ -127,14 +127,14 @@ Rules:
 
 # Phase 4 — Connector SDK
 
-- [ ] P4-001 BaseConnector interface
+- [x] P4-001 BaseConnector interface
 - [ ] P4-002 OAuth manager
 - [ ] P4-003 Token storage
-- [ ] P4-004 Connector registry
+- [x] P4-004 Connector registry
 - [ ] P4-005 Job scheduler
-- [ ] P4-006 Retry framework
-- [ ] P4-007 Sync framework
-- [ ] P4-008 Health checks
+- [x] P4-006 Retry framework
+- [x] P4-007 Sync framework
+- [x] P4-008 Health checks
 - [ ] P4-009 Logging
 - [ ] P4-010 Metrics
 - [ ] P4-011 Phase review

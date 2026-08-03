@@ -18,6 +18,10 @@
 
 Copy `.env.example` to `.env`; never place real credentials in a committed file.
 
+For connector work, run the complete Python 3.12 SDK gate with
+`./scripts/test-connector-sdk.sh`. It checks formatting, lint, strict typing,
+the reusable connector contracts, and the coverage threshold in Docker.
+
 ## Commit messages
 
 Use an imperative, scoped message that explains the completed outcome, such as:

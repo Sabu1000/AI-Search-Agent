@@ -38,6 +38,14 @@ jobs:
       - name: Build and test backend target
         run: ./scripts/test-backend.sh
 
+  connector-sdk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and run connector SDK contract tests
+        run: ./scripts/test-connector-sdk.sh
+
   desktop-rust:
     runs-on: ubuntu-latest
     timeout-minutes: 20

@@ -11,11 +11,12 @@ after its implementation, tests, and documentation all pass review.
 
 ## Current status
 
-- Completed stages: `00_README.md` through `05_API_SPECIFICATION.md`
-- Next stage: `06_CONNECTOR_FRAMEWORK.md`
-- Product status: tested project foundation with runnable web, API, worker, and
-  desktop application shells; search, database, and public API behavior are
-  fully specified but product features are not implemented yet
+- Completed stages: `00_README.md` through `06_CONNECTOR_FRAMEWORK.md`
+- Next stage: `07_INDEXING_PIPELINE.md`
+- Product status: tested project foundation plus an implemented Python
+  connector SDK with strict provider models, idempotent change streams, retry
+  handling, runtime validation, a registry, and a contract-test kit; search,
+  database, and public API behavior are specified but not yet implemented
 - Safety boundary: version 1 is read-only; retrieved content is untrusted data
   and cannot trigger actions
 
@@ -82,6 +83,7 @@ Run the containerized backend and desktop Rust checks with:
 
 ```sh
 ./scripts/test-backend.sh
+./scripts/test-connector-sdk.sh
 ./scripts/test-desktop-rust.sh
 ```
 
