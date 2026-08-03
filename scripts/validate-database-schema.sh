@@ -68,6 +68,7 @@ for table in \
   messages \
   message_claims \
   citations \
+  api_idempotency_keys \
   jobs \
   job_attempts \
   outbox_events \
@@ -106,6 +107,7 @@ for tenant_table in \
   messages \
   message_claims \
   citations \
+  api_idempotency_keys \
   jobs \
   job_attempts \
   outbox_events \

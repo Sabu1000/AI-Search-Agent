@@ -11,11 +11,11 @@ after its implementation, tests, and documentation all pass review.
 
 ## Current status
 
-- Completed stages: `00_README.md` through `04_DATABASE_SCHEMA.md`
-- Next stage: `05_API_SPECIFICATION.md`
+- Completed stages: `00_README.md` through `05_API_SPECIFICATION.md`
+- Next stage: `06_CONNECTOR_FRAMEWORK.md`
 - Product status: tested project foundation with runnable web, API, worker, and
-  desktop application shells; search and database behavior are fully specified
-  but product features are not implemented yet
+  desktop application shells; search, database, and public API behavior are
+  fully specified but product features are not implemented yet
 - Safety boundary: version 1 is read-only; retrieved content is untrusted data
   and cannot trigger actions
 

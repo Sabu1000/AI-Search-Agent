@@ -540,6 +540,26 @@ marked incomplete or removed by the same deletion workflow.
 
 ## Job, deletion, quota, and audit tables
 
+### api_idempotency_keys
+
+| Column | Type and rules |
+| --- | --- |
+| `id` | UUID primary key |
+| `workspace_id`, `user_id` | Composite FK to active membership, cascade with workspace deletion |
+| `key_hash` | BYTEA not null; raw client key is never stored |
+| `method`, `route_template` | Bounded TEXT identifying the canonical operation |
+| `request_hash` | BYTEA not null over the canonical validated body and relevant headers |
+| `status` | TEXT check `processing`, `completed`, `failed` |
+| `response_status` | SMALLINT null with valid HTTP status check |
+| `response_body` | JSONB null, bounded and forbidden from containing tokens, URLs, source content, or excerpts |
+| `resource_type`, `resource_id` | TEXT and UUID null durable replay target |
+| `created_at`, `updated_at`, `expires_at` | TIMESTAMPTZ not null |
+
+`UNIQUE (workspace_id, user_id, method, route_template, key_hash)` reserves a
+key atomically. Changed request hashes conflict. Sensitive-capability endpoints
+store only a resource pointer and regenerate an authorized short-lived response
+instead of replaying secrets.
+
 ### jobs
 
 | Column | Type and rules |
@@ -604,6 +624,7 @@ events after Redis loss.
 | `status` | TEXT check `pending`, `running`, `blocked`, `completed`, `failed` |
 | `idempotency_key` | TEXT not null |
 | `deadline_at` | TIMESTAMPTZ not null, at most 24 hours from confirmation for account/connection deletion |
+| `receipt_token_hash` | BYTEA null unique; required for account deletion and never stored raw |
 | `remaining_counts`, `failure_codes` | JSONB not null objects containing counts and sanitized codes only |
 | `requested_at`, `started_at`, `completed_at`, `updated_at` | TIMESTAMPTZ |
 
@@ -720,8 +741,8 @@ RLS is enabled and forced on every tenant-owned table: `workspace_members`,
 `provider_events`, `sources`, `source_people`,
 `source_collection_memberships`, `document_versions`, `chunks`,
 `chunk_embeddings`, `search_requests`, `conversations`, `messages`,
-`message_claims`, `citations`, `jobs`, `job_attempts`, `outbox_events`,
-`deletion_requests`, and `workspace_usage`.
+`message_claims`, `citations`, `api_idempotency_keys`, `jobs`, `job_attempts`,
+`outbox_events`, `deletion_requests`, and `workspace_usage`.
 
 After session authentication, the API sets `app.user_id` with `SET LOCAL`.
 User-scoped membership policy permits that user to read only their own active
@@ -798,6 +819,8 @@ minimum workload indexes are:
   for unpurged history;
 - `messages(workspace_id, conversation_id, created_at)` and all citation
   lineage keys;
+- unique API idempotency reservation plus
+  `api_idempotency_keys(workspace_id, expires_at)` cleanup index;
 - partial runnable-job index on `(queue, priority DESC, available_at, created_at)`
   for `pending` and `retry_wait` rows;
 - partial unpublished-outbox index on `(created_at)` where `published_at` is
@@ -882,7 +905,8 @@ used by local Compose and CI. It must cover:
 - missing-context, malformed-context, suspended-member, revoked-connection, and
   deleting-workspace fail-closed tests;
 - composite-FK attempts to connect a child row to another workspace;
-- duplicate source, cursor, webhook, job, token, and chunk idempotency races;
+- duplicate API request, source, cursor, webhook, job, token, and chunk
+  idempotency races;
 - successful atomic version promotion and injected failures at every step that
   prove the previous version remains searchable;
 - concurrent quota promotions that cannot exceed either workspace limit;
