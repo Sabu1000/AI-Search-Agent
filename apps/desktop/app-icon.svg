@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title description">
+  <title id="title">Universal AI Search</title>
+  <description id="description">A lime search lens and citation link on a deep green field.</description>
+  <rect width="1024" height="1024" rx="224" fill="#07110f" />
+  <circle cx="438" cy="420" r="216" fill="none" stroke="#b8f34a" stroke-width="88" />
+  <path d="M590 578 780 768" fill="none" stroke="#b8f34a" stroke-linecap="round" stroke-width="96" />
+  <path d="M334 420h208M438 316v208" fill="none" stroke="#f4f6ef" stroke-linecap="round" stroke-width="52" />
+</svg>

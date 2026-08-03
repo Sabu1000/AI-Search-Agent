@@ -1,0 +1,24 @@
+{
+  "name": "universal-ai-search",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Read-only, cited search across local files, Gmail, Google Drive, and GitHub.",
+  "packageManager": "pnpm@11.20.0",
+  "engines": {
+    "node": ">=22 <27",
+    "pnpm": ">=11 <12"
+  },
+  "scripts": {
+    "build": "pnpm --recursive --if-present build",
+    "check": "./scripts/check.sh && pnpm format:check && pnpm lint && pnpm typecheck && pnpm test",
+    "dev": "pnpm --parallel --filter @universal-ai-search/web --filter @universal-ai-search/desktop dev",
+    "format": "prettier --write \"**/*.{css,js,json,mjs,ts,tsx,yaml,yml}\"",
+    "format:check": "prettier --check \"**/*.{css,js,json,mjs,ts,tsx,yaml,yml}\"",
+    "lint": "pnpm --recursive --if-present lint",
+    "test": "pnpm --recursive --if-present test",
+    "typecheck": "pnpm --recursive --if-present typecheck"
+  },
+  "devDependencies": {
+    "prettier": "3.9.6"
+  }
+}

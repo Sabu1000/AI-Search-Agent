@@ -18,12 +18,15 @@ __pycache__/
 .ruff_cache/
 .venv/
 *.py[cod]
+.coverage
+htmlcov/
 
 # JavaScript and TypeScript
 node_modules/
 .next/
 coverage/
 dist/
+*.tsbuildinfo
 
 # Rust and Tauri
 target/
