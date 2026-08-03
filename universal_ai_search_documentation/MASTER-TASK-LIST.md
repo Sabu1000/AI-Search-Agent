@@ -4,7 +4,7 @@
 
 **Version:** 1.0
 
-**Status:** In progress — documentation stages 00 and 01 complete
+**Status:** In progress — documentation stages 00 through 02 complete
 
 ---
 

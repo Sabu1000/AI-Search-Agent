@@ -11,9 +11,9 @@ after its implementation, tests, and documentation all pass review.
 
 ## Current status
 
-- Completed stages: `00_README.md`, `01_PROJECT_SPEC.md`
-- Next stage: `02_SYSTEM_ARCHITECTURE.md`
-- Product status: pre-implementation
+- Completed stages: `00_README.md` through `02_SYSTEM_ARCHITECTURE.md`
+- Next stage: `03_SEARCH_ENGINE_DESIGN.md`
+- Product status: requirements and architecture defined; pre-implementation
 - Safety boundary: version 1 is read-only; retrieved content is untrusted data
   and cannot trigger actions
 
