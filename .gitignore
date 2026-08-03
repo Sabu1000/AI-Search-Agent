@@ -1,0 +1,34 @@
+# Operating systems and editors
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python
+__pycache__/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.venv/
+*.py[cod]
+
+# JavaScript and TypeScript
+node_modules/
+.next/
+coverage/
+dist/
+
+# Rust and Tauri
+target/
+
+# Logs and temporary files
+*.log
+.cache/
+tmp/
