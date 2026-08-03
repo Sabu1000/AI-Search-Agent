@@ -4,7 +4,7 @@
 
 **Version:** 1.0
 
-**Status:** Planning
+**Status:** In progress — documentation stages 00 and 01 complete
 
 ---
 

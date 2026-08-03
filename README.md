@@ -11,7 +11,8 @@ after its implementation, tests, and documentation all pass review.
 
 ## Current status
 
-- Current stage: `00_README.md` — repository and documentation bootstrap
+- Completed stages: `00_README.md`, `01_PROJECT_SPEC.md`
+- Next stage: `02_SYSTEM_ARCHITECTURE.md`
 - Product status: pre-implementation
 - Safety boundary: version 1 is read-only; retrieved content is untrusted data
   and cannot trigger actions
@@ -42,10 +43,10 @@ For each stage:
 5. Update documentation and the master task list.
 6. Review the diff, then commit only after explicit approval.
 
-Run the documentation gate with:
+Run all available project checks with:
 
 ```sh
-./scripts/validate-docs.sh
+./scripts/check.sh
 ```
 
 ## Docker plan
