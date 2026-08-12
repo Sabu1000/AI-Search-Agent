@@ -1,8 +1,9 @@
 # API Specification
 
-> **Implementation status:** Specification complete; `0/49` catalogued `/v1`
-> product endpoints are implemented. Existing liveness/readiness routes are
-> foundation endpoints outside this catalog. See
+> **Implementation status:** Specification and shared API platform primitives
+> are complete; `0/49` catalogued `/v1` product endpoints are implemented.
+> Existing liveness/readiness routes are foundation endpoints outside this
+> catalog. See
 > [`IMPLEMENTATION_STATUS.md`](IMPLEMENTATION_STATUS.md).
 
 ## Goals and ownership
@@ -22,9 +23,9 @@ authentication and provider consent details to
 [`09_AUTH_AND_OAUTH.md`](09_AUTH_AND_OAUTH.md), and desktop filesystem behavior
 to [`10_DESKTOP_AGENT.md`](10_DESKTOP_AGENT.md).
 
-The contracts are specified now. Route implementations and generated clients
-are added in their feature phases after dependent security and provider stages
-are complete.
+The contracts and dependency-safe shared platform are implemented now. Product
+route implementations and generated clients are added in their feature phases
+after dependent security and provider stages are complete.
 
 ## Protocol and base conventions
 
@@ -881,4 +882,7 @@ private content and fake providers only.
 - Contract, cross-tenant, replay, streaming, tampering, and deletion tests are
   defined.
 - Every product requirement maps to concrete API behavior.
+- The shared runtime supplies OpenAPI 3.1 routing, request IDs, strict boundary
+  models, problem details, cursor/idempotency helpers, and fail-closed
+  auth/workspace interfaces while product routes remain closed.
 - `./scripts/validate-api-specification.sh` passes.

@@ -16,14 +16,15 @@ separately so a validated design is never presented as working product code.
 - Implementation status: foundation is partial (`27/30` master tasks), the
   database phase is partial (`12/15` master tasks), the Connector SDK is
   partial (`5/11` master tasks), and end-to-end MVP acceptance is `0/11`
-- Backfill status: database runtime `B1` is complete; API platform primitives
-  `B2` are next
+- Backfill status: database runtime `B1` and API platform primitives `B2` are
+  complete; the Stage 08/09 security and authentication design checkpoint `B3`
+  is next
 - Next specification: `07_INDEXING_PIPELINE.md`, paused until database/API
   prerequisites are backfilled
 - Product status: tested project foundation, an implemented 33-table
-  PostgreSQL schema with forced tenant RLS, and an implemented Python connector
-  SDK; repositories, product APIs, indexing, search, and user-facing features
-  remain to be built
+  PostgreSQL schema with forced tenant RLS, an implemented Python connector
+  SDK, and a tested fail-closed API platform layer; all 49 product endpoints,
+  repositories, indexing, search, and user-facing features remain to be built
 - Safety boundary: version 1 is read-only; retrieved content is untrusted data
   and cannot trigger actions
 

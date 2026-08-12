@@ -100,6 +100,8 @@ services:
       UAS_OBJECT_STORAGE_BUCKET: ${UAS_OBJECT_STORAGE_BUCKET:-universal-ai-search-local}
       UAS_OBJECT_STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER:-minio}
       UAS_OBJECT_STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-change-me-local}
+      UAS_CURSOR_SIGNING_KEY: ${UAS_CURSOR_SIGNING_KEY:-change-me-local-cursor-signing-key-32-bytes}
+      UAS_IDEMPOTENCY_HASH_KEY: ${UAS_IDEMPOTENCY_HASH_KEY:-change-me-local-idempotency-hash-key-32-bytes}
     ports:
       - "${API_PORT:-8000}:8000"
     depends_on:

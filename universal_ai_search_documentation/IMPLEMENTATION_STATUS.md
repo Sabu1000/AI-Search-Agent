@@ -1,8 +1,8 @@
 # Implementation Status
 
-**Last audited:** 2026-08-03
+**Last audited:** 2026-08-11
 
-**Audited baseline:** `a736841`; this ledger includes the current `B1`
+**Audited baseline:** `520fb66`; this ledger includes the current `B2`
 checkpoint.
 
 **Purpose:** Separate validated design specifications from working product
@@ -28,10 +28,10 @@ shells are never counted as finished user features.
 | --- | --- | --- | --- |
 | `00_README.md` | Complete | Partial foundation | Monorepo, CI, Docker Compose, web/API/worker/desktop shells, shared packages, and quality gates work. Branch protection, a license decision, and the Phase 1 review remain open. |
 | `01_PROJECT_SPEC.md` | Complete | Not started as an MVP | The 11 MVP requirements have testable acceptance criteria, but none passes end to end. See the requirement audit below. |
-| `02_SYSTEM_ARCHITECTURE.md` | Complete | Partial | Process shells, local dependencies, schema migration ordering, and revision-aware API readiness exist. Durable repositories, authorization services, queues, connector orchestration, indexing, search, and answer services do not. |
+| `02_SYSTEM_ARCHITECTURE.md` | Complete | Partial | Process shells, local dependencies, schema migration ordering, revision-aware API readiness, and a fail-closed HTTP boundary exist. Durable repositories, working authentication/authorization services, queues, connector orchestration, indexing, search, and answer services do not. |
 | `03_SEARCH_ENGINE_DESIGN.md` | Complete | Not started | No lexical retrieval, vector retrieval, fusion, reranking, context builder, citation builder, grounding evaluator, or search endpoint exists. |
 | `04_DATABASE_SCHEMA.md` | Complete | Database runtime implemented; phase partial | Alembic revision `0001_initial_schema` creates `33/33` specified tables, constraints, indexes, roles, grants, and forced RLS. Compose migrates before API startup; readiness checks the revision; 11 PostgreSQL integration tests cover catalog, lifecycle, and tenant isolation. Seed data, repositories, backup automation, and the Phase 3 review remain. |
-| `05_API_SPECIFICATION.md` | Complete | Not started | FastAPI exposes liveness/readiness only. None of the `49` catalogued `/v1` product endpoints is implemented. Shared auth, problem details, idempotency, pagination, rate limiting, and SSE behavior also remain. |
+| `05_API_SPECIFICATION.md` | Complete | API platform implemented; product routes not started | FastAPI now has an OpenAPI 3.1 `/v1` router boundary, request IDs, strict serialization, RFC 9457 problems, signed cursor helpers, idempotency primitives, and fail-closed auth/workspace dependency interfaces. `0/49` catalogued product endpoints exist; working auth, rate limiting, SSE, repositories, and feature services remain. |
 | `06_CONNECTOR_FRAMEWORK.md` | Complete | SDK implemented; provider ecosystem partial | The typed SDK, four change variants, registry, retry policy, runtime stream validator, fake connector, Docker gate, and CI job are implemented. Real Gmail, Drive, GitHub, and local-file connectors, OAuth persistence, scheduling, logging, and metrics are not. |
 
 The next numbered design document is `07_INDEXING_PIPELINE.md`, but it is
@@ -42,7 +42,7 @@ the next specification without being the next safe implementation task.
 
 | Requirement | Status | Implemented evidence | Missing acceptance path |
 | --- | --- | --- | --- |
-| `AUTH-001` | Partial | User, identity, one-time-token, session, workspace, and membership tables now exist behind forced RLS. | Password hashing, session services, register/login/logout UI and APIs, safe errors, and end-to-end tests. |
+| `AUTH-001` | Partial | User, identity, one-time-token, session, workspace, and membership tables exist behind forced RLS; immutable principal/workspace contracts and rejecting-by-default dependencies are wired into FastAPI. | Password hashing, real authentication and membership backends, session services, register/login/logout UI and APIs, and end-to-end tests. |
 | `DESKTOP-001` | Partial | Tauri React/Rust shell compiles and is container-checked. | Signed installers, folder selection, root authorization, scanner/watcher, device registration, offline queue, removal/deletion flow, and platform tests. |
 | `GOOGLE-001` | Not started | Canonical SDK provider contracts only. | OAuth scopes/callbacks, encrypted credentials, Gmail and Drive clients, selections, full/incremental sync, revocation, UI, and provider contract tests. |
 | `GITHUB-001` | Not started | Canonical SDK provider contract only. | GitHub App, installation/repository selection, API client, webhooks, reconciliation, access removal, UI, and provider contract tests. |
@@ -52,7 +52,7 @@ the next specification without being the next safe implementation task.
 | `CITATION-001` | Partial | Claim and citation tables enforce same-workspace message/source/version/chunk lineage. | Citation builder, authorization recheck, safe target opening, API/UI rendering, and correctness tests. |
 | `CONNECTION-001` | Partial | Connection, scope, cursor, deletion, job, and outbox storage exists; the SDK has deletion and permission-change events. | Credential services, revocation, sync cancellation, cascade workers, progress API/UI, 24-hour enforcement, and end-to-end tests. |
 | `ACCOUNT-001` | Partial | Workspace state and durable deletion-request/job/outbox/audit storage exist. | Immediate access-termination service, cascade workers, receipt/status, export, backup-retention handling, and deadline alerts/tests. |
-| `SAFETY-001` | Partial | Product and SDK are structurally read-only; SDK validates URLs/JSON and masks credentials; all identity and tenant tables use forced, fail-closed RLS tested with non-bypass roles. | Authorization middleware, content sanitization boundaries, prompt-injection fixtures through retrieval/answering, log redaction, and full cross-user service tests. |
+| `SAFETY-001` | Partial | Product and SDK are structurally read-only; strict API models reject unknown input; privacy-safe problems avoid echoing inputs and internal errors; auth/workspace dependencies reject by default; signed cursors and idempotency hashes bind principal/workspace context; identity and tenant tables use tested forced RLS. | Working authorization backends, content sanitization boundaries, prompt-injection fixtures through retrieval/answering, log redaction, and full cross-user service tests. |
 
 Current end-to-end MVP acceptance: `0/11` requirements. Partial means useful
 prerequisite code exists; it does not increase the end-to-end count.
@@ -115,14 +115,41 @@ backup implementation, and the Phase 3 review remain open. These tables are
 production schema, but they do not by themselves implement repositories or
 user-visible workflows.
 
+### API platform
+
+- FastAPI publishes OpenAPI 3.1, mounts an intentionally empty `/v1` router,
+  and keeps all `49` product operations closed until their services exist.
+- Every response receives a canonical UUID request ID; valid caller IDs are
+  normalized and invalid IDs are replaced.
+- Strict request/response models enforce unknown-field rejection, canonical
+  UUIDs, UTC `Z` timestamps, and optional-field omission.
+- RFC 9457-compatible `application/problem+json` responses cover validation,
+  framework HTTP errors, expected domain errors, and opaque unexpected errors
+  without exposing rejected input or private exception details.
+- HMAC-authenticated, expiring keyset cursors bind endpoint, workspace,
+  principal, filters, sorting, and position.
+- Idempotency primitives validate and HMAC-hash keys, canonically hash the
+  request context, define atomic reservation/replay storage contracts, and
+  prevent credential, content, and signed-URL persistence in replay payloads.
+- Immutable principal/workspace models and dependency protocols are wired to
+  rejecting-by-default backends so unfinished authentication cannot grant
+  access accidentally.
+- Compose passes independent cursor/idempotency secrets; settings reject short,
+  shared, or local-only production values.
+- `50 tests at 96% line coverage` exercise platform contracts; Black, Ruff,
+  and mypy run in the backend Docker gate.
+
+No API master task is marked complete: the Stage 05 implementation is shared
+infrastructure, while the catalogued tasks require working feature endpoints.
+
 ## Explicitly unimplemented inventory
 
 The following do not exist in production code yet:
 
 - SQLAlchemy models/repositories, transaction services, or seed data for the
   migrated schema.
-- Account registration, login, sessions, authorization middleware, OAuth, or
-  encrypted provider credential storage.
+- Account registration, login, sessions, working authentication/authorization
+  backends, OAuth, or encrypted provider credential storage.
 - Any real provider client or provider data synchronization.
 - Extraction, parsing, chunking, embedding, deduplication, or indexing workers.
 - Keyword, vector, hybrid, filtered, or reranked search.
@@ -149,9 +176,10 @@ define design ownership:
 | `B6` | Stage 03 search implementation | Tenant-safe FTS/vector retrieval, fusion, filters, ranking, context, citations, API, and evaluation tests. |
 | `B7` | Real provider and desktop slices | Google, GitHub, then local desktop behavior, each certified by the Connector SDK suite and integrated end to end. |
 
-The active backfill item is always the first unfinished row. Backfills `B0` and
-`B1` are complete; `B2` is next. No later slice may be reported complete
-because a model, interface, fake, document, or application shell exists.
+The active backfill item is always the first unfinished row. Backfills `B0`,
+`B1`, and `B2` are complete; `B3` is next. No later slice may be reported
+complete because a model, interface, fake, document, or application shell
+exists.
 
 ## Evidence commands
 

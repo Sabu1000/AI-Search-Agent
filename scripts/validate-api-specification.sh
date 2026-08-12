@@ -265,6 +265,52 @@ if [ ! -f "$database_schema" ] || ! grep -Fq '`receipt_token_hash`' "$database_s
   failures=$((failures + 1))
 fi
 
+for runtime_artifact in \
+  apps/api/src/universal_ai_search/api/app.py \
+  apps/api/src/universal_ai_search/api/auth.py \
+  apps/api/src/universal_ai_search/api/context.py \
+  apps/api/src/universal_ai_search/api/idempotency.py \
+  apps/api/src/universal_ai_search/api/models.py \
+  apps/api/src/universal_ai_search/api/pagination.py \
+  apps/api/src/universal_ai_search/api/problems.py \
+  apps/api/src/universal_ai_search/api/routes/v1.py \
+  apps/api/src/universal_ai_search/config.py \
+  apps/api/tests/test_api_platform.py \
+  apps/api/tests/test_auth_contracts.py \
+  apps/api/tests/test_config.py \
+  apps/api/tests/test_idempotency.py \
+  apps/api/tests/test_pagination.py
+do
+  if [ ! -f "$repository_root/$runtime_artifact" ]; then
+    printf 'ERROR: API platform artifact is missing: %s\n' "$runtime_artifact" >&2
+    failures=$((failures + 1))
+  fi
+done
+
+for runtime_contract in \
+  'openapi_version="3.1.0"' \
+  'RequestContextMiddleware' \
+  'application/problem+json' \
+  'class CursorSigner' \
+  'class IdempotencyCoordinator' \
+  'class AuthenticationBackend' \
+  'class WorkspaceAuthorizationBackend'
+do
+  if ! grep -R -Fq "$runtime_contract" "$repository_root/apps/api/src"; then
+    printf 'ERROR: API platform runtime is missing contract: %s\n' "$runtime_contract" >&2
+    failures=$((failures + 1))
+  fi
+done
+
+for secret_setting in UAS_CURSOR_SIGNING_KEY UAS_IDEMPOTENCY_HASH_KEY
+do
+  if ! grep -Fq "$secret_setting" "$repository_root/.env.example" \
+    || ! grep -Fq "$secret_setting" "$repository_root/compose.yaml"; then
+    printf 'ERROR: API platform secret is not wired through Compose: %s\n' "$secret_setting" >&2
+    failures=$((failures + 1))
+  fi
+done
+
 if grep -Eiq '(^|[^[:alpha:]])(TODO|TBD)([^[:alpha:]]|$)' "$specification"; then
   printf '%s\n' 'ERROR: API specification contains unresolved TODO or TBD markers.' >&2
   failures=$((failures + 1))
