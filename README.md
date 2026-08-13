@@ -11,16 +11,17 @@ separately so a validated design is never presented as working product code.
 
 ## Current status
 
-- Specification status: `00_README.md` through `06_CONNECTOR_FRAMEWORK.md` are
-  validated
+- Specification status: `00_README.md` through `06_CONNECTOR_FRAMEWORK.md`,
+  plus the dependency-safe Stage 08/09 security and authentication checkpoint,
+  are validated
 - Implementation status: foundation is partial (`27/30` master tasks), the
   database phase is partial (`12/15` master tasks), the Connector SDK is
   partial (`5/11` master tasks), and end-to-end MVP acceptance is `0/11`
-- Backfill status: database runtime `B1` and API platform primitives `B2` are
-  complete; the Stage 08/09 security and authentication design checkpoint `B3`
-  is next
-- Next specification: `07_INDEXING_PIPELINE.md`, paused until database/API
-  prerequisites are backfilled
+- Backfill status: database runtime `B1`, API platform primitives `B2`, and the
+  Stage 08/09 security/authentication design checkpoint `B3` are complete;
+  authentication vertical slice `B4` is next
+- Next numbered specification: `07_INDEXING_PIPELINE.md`, paused until the
+  authentication vertical slice establishes real user/workspace authority
 - Product status: tested project foundation, an implemented 33-table
   PostgreSQL schema with forced tenant RLS, an implemented Python connector
   SDK, and a tested fail-closed API platform layer; all 49 product endpoints,

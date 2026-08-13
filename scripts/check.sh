@@ -11,6 +11,7 @@ repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 "$repository_root/scripts/validate-database-schema.sh"
 "$repository_root/scripts/validate-api-specification.sh"
 "$repository_root/scripts/validate-connector-framework.sh"
+"$repository_root/scripts/validate-security-auth.sh"
 "$repository_root/scripts/validate-implementation-status.sh"
 "$repository_root/scripts/validate-foundation.sh"
 

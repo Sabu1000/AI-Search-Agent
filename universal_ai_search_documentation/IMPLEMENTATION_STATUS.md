@@ -1,8 +1,8 @@
 # Implementation Status
 
-**Last audited:** 2026-08-11
+**Last audited:** 2026-08-12
 
-**Audited baseline:** `520fb66`; this ledger includes the current `B2`
+**Audited baseline:** `3777cc7`; this ledger includes the current `B3` design
 checkpoint.
 
 **Purpose:** Separate validated design specifications from working product
@@ -33,10 +33,13 @@ shells are never counted as finished user features.
 | `04_DATABASE_SCHEMA.md` | Complete | Database runtime implemented; phase partial | Alembic revision `0001_initial_schema` creates `33/33` specified tables, constraints, indexes, roles, grants, and forced RLS. Compose migrates before API startup; readiness checks the revision; 11 PostgreSQL integration tests cover catalog, lifecycle, and tenant isolation. Seed data, repositories, backup automation, and the Phase 3 review remain. |
 | `05_API_SPECIFICATION.md` | Complete | API platform implemented; product routes not started | FastAPI now has an OpenAPI 3.1 `/v1` router boundary, request IDs, strict serialization, RFC 9457 problems, signed cursor helpers, idempotency primitives, and fail-closed auth/workspace dependency interfaces. `0/49` catalogued product endpoints exist; working auth, rate limiting, SSE, repositories, and feature services remain. |
 | `06_CONNECTOR_FRAMEWORK.md` | Complete | SDK implemented; provider ecosystem partial | The typed SDK, four change variants, registry, retry policy, runtime stream validator, fake connector, Docker gate, and CI job are implemented. Real Gmail, Drive, GitHub, and local-file connectors, OAuth persistence, scheduling, logging, and metrics are not. |
+| `08_SECURITY_AND_PRIVACY.md` | Complete | Partial controls | The threat model, data classification, tenant/cryptographic boundaries, browser/input/model defenses, audit/redaction policy, deletion/backup rules, and security release gates are implementation-ready. Existing RLS, strict API boundaries, secret validation, and containerized tests implement only part of the required controls. |
+| `09_AUTH_AND_OAUTH.md` | Complete | Not started as a working auth flow | Password, email proof, access/refresh, CSRF, reauthentication, workspace policy, OAuth state/PKCE, Google, GitHub App, credential-envelope, revocation, and test contracts are explicit and automatically validated. No registration, login, session repository, OAuth callback, or credential encryption service exists yet. |
 
-The next numbered design document is `07_INDEXING_PIPELINE.md`, but it is
-paused while the database/API prerequisites are backfilled. A document may be
-the next specification without being the next safe implementation task.
+The next numbered design document is `07_INDEXING_PIPELINE.md`, but it remains
+paused until the authentication vertical slice establishes real principals and
+workspace authority. A document may be the next specification without being
+the next safe implementation task.
 
 ## MVP requirement audit
 
@@ -170,14 +173,14 @@ define design ownership:
 | `B0` | Truthful status tracking | This ledger, corrected README/workflow language, automated status validation, clean tests, committed and pushed. |
 | `B1` | Stage 04 database runtime | Migration toolchain; all 33 specified tables/types/constraints/indexes; tenant RLS; upgrade/downgrade and schema-contract tests against PostgreSQL/pgvector; documented rollback. |
 | `B2` | Stage 05 API platform primitives | Versioned router, RFC 9457 problem details, request IDs, serialization, cursor helpers, idempotency primitives, auth/workspace dependency interfaces, and contract tests. Product endpoints remain closed until their services exist. |
-| `B3` | Stage 08/09 security and auth design checkpoint | Complete the owning security/auth specifications before implementing credentials, sessions, authorization middleware, and OAuth. |
+| `B3` | Stage 08/09 security and auth design checkpoint | Complete the owning security/auth specifications before implementing credentials, sessions, authorization middleware, and OAuth. **Complete:** both documents now define implementation-ready controls and test matrices enforced by `validate-security-auth.sh`. |
 | `B4` | Authentication vertical slice | Users, password/session security, register/login/refresh/logout/me endpoints and minimal UI with integration tests. |
 | `B5` | Stage 07 indexing design and implementation | Extraction/chunking/deduplication/embedding queue contracts and an end-to-end fake-connector-to-index path. |
 | `B6` | Stage 03 search implementation | Tenant-safe FTS/vector retrieval, fusion, filters, ranking, context, citations, API, and evaluation tests. |
 | `B7` | Real provider and desktop slices | Google, GitHub, then local desktop behavior, each certified by the Connector SDK suite and integrated end to end. |
 
 The active backfill item is always the first unfinished row. Backfills `B0`,
-`B1`, and `B2` are complete; `B3` is next. No later slice may be reported
+`B1`, `B2`, and `B3` are complete; `B4` is next. No later slice may be reported
 complete because a model, interface, fake, document, or application shell
 exists.
 
