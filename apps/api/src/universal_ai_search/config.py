@@ -6,6 +6,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _LOCAL_CURSOR_SIGNING_KEY = "local-cursor-signing-key-change-before-production"
 _LOCAL_IDEMPOTENCY_HASH_KEY = "local-idempotency-hash-key-change-before-production"
+_LOCAL_AUTH_SIGNING_KEY = "local-auth-signing-key-change-before-production"
+_LOCAL_AUTH_HASH_KEY = "local-auth-hash-key-change-before-production"
 
 
 class Settings(BaseSettings):
@@ -20,6 +22,7 @@ class Settings(BaseSettings):
         "local"
     )
     database_url: str = "postgresql+asyncpg://uas:uas@localhost:5432/uas"
+    database_role: Literal["app_api"] = "app_api"
     redis_url: str = "redis://localhost:6379/0"
     object_storage_endpoint: str = "http://localhost:9000"
     object_storage_bucket: str = "universal-ai-search-local"
@@ -27,18 +30,29 @@ class Settings(BaseSettings):
     object_storage_secret_key: SecretStr = SecretStr("minio-local-only")
     cursor_signing_key: SecretStr = SecretStr(_LOCAL_CURSOR_SIGNING_KEY)
     idempotency_hash_key: SecretStr = SecretStr(_LOCAL_IDEMPOTENCY_HASH_KEY)
+    auth_signing_key: SecretStr = SecretStr(_LOCAL_AUTH_SIGNING_KEY)
+    auth_hash_key: SecretStr = SecretStr(_LOCAL_AUTH_HASH_KEY)
+    web_origin: str = "http://localhost:3000"
+    smtp_host: str = "localhost"
+    smtp_port: int = 1025
+    email_from: str = "Universal AI Search <no-reply@localhost>"
 
     @model_validator(mode="after")
     def validate_api_platform_secrets(self) -> Self:
         cursor_key = self.cursor_signing_key.get_secret_value()
         idempotency_key = self.idempotency_hash_key.get_secret_value()
-        if len(cursor_key.encode()) < 32 or len(idempotency_key.encode()) < 32:
+        auth_signing_key = self.auth_signing_key.get_secret_value()
+        auth_hash_key = self.auth_hash_key.get_secret_value()
+        secret_values = (cursor_key, idempotency_key, auth_signing_key, auth_hash_key)
+        if any(len(value.encode()) < 32 for value in secret_values):
             raise ValueError("API platform secrets must be at least 32 bytes")
-        if cursor_key == idempotency_key:
+        if len(set(secret_values)) != len(secret_values):
             raise ValueError("API platform secrets must be distinct")
         if self.environment in {"staging", "production"} and (
             cursor_key == _LOCAL_CURSOR_SIGNING_KEY
             or idempotency_key == _LOCAL_IDEMPOTENCY_HASH_KEY
+            or auth_signing_key == _LOCAL_AUTH_SIGNING_KEY
+            or auth_hash_key == _LOCAL_AUTH_HASH_KEY
         ):
             raise ValueError(
                 "local-only API platform secrets cannot be used outside development"

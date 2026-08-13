@@ -15,17 +15,19 @@ separately so a validated design is never presented as working product code.
   plus the dependency-safe Stage 08/09 security and authentication checkpoint,
   are validated
 - Implementation status: foundation is partial (`27/30` master tasks), the
-  database phase is partial (`12/15` master tasks), the Connector SDK is
-  partial (`5/11` master tasks), and end-to-end MVP acceptance is `0/11`
+  authentication phase is partial (`12/18` master tasks), the database phase
+  is partial (`12/15` master tasks), the Connector SDK is partial (`5/11`
+  master tasks), and end-to-end MVP acceptance is `1/11`
 - Backfill status: database runtime `B1`, API platform primitives `B2`, and the
-  Stage 08/09 security/authentication design checkpoint `B3` are complete;
-  authentication vertical slice `B4` is next
-- Next numbered specification: `07_INDEXING_PIPELINE.md`, paused until the
-  authentication vertical slice establishes real user/workspace authority
+  Stage 08/09 security/authentication design checkpoint `B3`, and the
+  authentication vertical slice `B4` are complete
+- Next numbered specification and implementation slice:
+  `07_INDEXING_PIPELINE.md` (`B5`)
 - Product status: tested project foundation, an implemented 33-table
   PostgreSQL schema with forced tenant RLS, an implemented Python connector
-  SDK, and a tested fail-closed API platform layer; all 49 product endpoints,
-  repositories, indexing, search, and user-facing features remain to be built
+  SDK, a tested fail-closed API platform layer, and a working six-endpoint
+  email/password authentication flow with a minimal web UI; indexing, search,
+  providers, and the remaining 43 product endpoints remain to be built
 - Safety boundary: version 1 is read-only; retrieved content is untrusted data
   and cannot trigger actions
 
@@ -106,6 +108,13 @@ Run the containerized Python and desktop Rust checks with:
 ./scripts/test-connector-sdk.sh
 ./scripts/test-database.sh
 ./scripts/test-desktop-rust.sh
+```
+
+With the local stack running, exercise registration, Mailpit verification,
+login, workspace discovery, token rotation, and logout end to end with:
+
+```sh
+python3 scripts/smoke-auth.py
 ```
 
 ## Docker foundation

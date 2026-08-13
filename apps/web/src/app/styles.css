@@ -52,6 +52,99 @@ nav {
   padding: 4rem 0;
 }
 
+.authHero {
+  grid-template-columns: minmax(0, 1.4fr) minmax(18rem, 28rem);
+  gap: clamp(2rem, 6vw, 7rem);
+}
+
+.authCard {
+  align-self: center;
+  padding: clamp(1.25rem, 3vw, 2rem);
+  border: 1px solid var(--line);
+  border-radius: 1.25rem;
+  background: rgb(14 28 24 / 92%);
+  box-shadow: 0 2rem 5rem rgb(0 0 0 / 25%);
+}
+
+.tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.tabs button,
+.secondary {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.7rem 1rem;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tabs button.active {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+form,
+.account {
+  display: grid;
+  gap: 1rem;
+}
+
+label {
+  display: grid;
+  gap: 0.4rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  padding: 0.85rem 0.9rem;
+  background: #091612;
+  color: var(--text);
+  font: inherit;
+}
+
+input:focus {
+  border-color: var(--accent);
+  outline: 2px solid rgb(184 243 74 / 18%);
+}
+
+form small,
+.workspace small,
+.sources li small {
+  color: var(--muted);
+}
+
+.notice {
+  margin: 1rem 0 0;
+  color: var(--accent);
+  line-height: 1.5;
+}
+
+.error {
+  margin: 1rem 0 0;
+  color: #ff9f93;
+  line-height: 1.5;
+}
+
+.workspace {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+}
+
 .eyebrow {
   color: var(--accent);
   font-size: 0.78rem;
@@ -103,6 +196,10 @@ h1 {
   opacity: 0.82;
 }
 
+button.primary:not(:disabled) {
+  cursor: pointer;
+}
+
 .sources {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -127,6 +224,8 @@ h1 {
 }
 
 .sources li {
+  display: grid;
+  align-content: space-between;
   min-height: 7rem;
   padding: 1rem;
   border: 1px solid var(--line);
@@ -137,7 +236,8 @@ h1 {
 
 @media (max-width: 700px) {
   .actions,
-  .sources {
+  .sources,
+  .authHero {
     grid-template-columns: 1fr;
     flex-direction: column;
     align-items: flex-start;

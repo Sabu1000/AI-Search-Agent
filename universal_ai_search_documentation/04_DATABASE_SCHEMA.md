@@ -1,9 +1,11 @@
 # Database Schema
 
 > **Implementation status:** Specification complete; `33/33` specified tables
-> are created by Alembic revision `0001_initial_schema`, with constraints,
-> workload indexes, forced RLS, and PostgreSQL integration tests. Repository
-> and product-service code remains future work. See
+> are created by Alembic revision `0001_initial_schema`; revision
+> `0002_auth_runtime` adds the authentication runtime fields and narrowly
+> granted bootstrap functions. Constraints, workload indexes, forced RLS, and
+> PostgreSQL integration tests are active. Non-authentication repository and
+> product-service code remains future work. See
 > [`IMPLEMENTATION_STATUS.md`](IMPLEMENTATION_STATUS.md).
 
 ## Goals and ownership
@@ -126,6 +128,8 @@ erDiagram
 | `email_verified_at` | TIMESTAMPTZ null |
 | `created_at`, `updated_at` | TIMESTAMPTZ not null |
 | `lock_version` | INTEGER not null default 1 |
+| `terms_version` | TEXT null until accepted registration terms are recorded; bounded to 50 characters |
+| `locale` | TEXT null for legacy/social bootstrap, otherwise a bounded locale identifier |
 
 Email uniqueness does not replace normalized social identity uniqueness.
 Changing an email requires a new verification transaction and optimistic lock.
@@ -172,9 +176,18 @@ user state, and expiry are valid.
 | `replaced_by_session_id` | UUID null self-FK, set null on deletion |
 | `device_metadata` | JSONB not null default empty object, sanitized and bounded |
 | `last_seen_at` | TIMESTAMPTZ null |
+| `csrf_token_hash` | BYTEA not null; keyed hash bound to browser refresh/logout proof |
+| `authorization_version` | BIGINT not null; session snapshot invalidated by account authorization changes |
 
 Only hashes of refresh tokens are stored. A detected replay revokes the complete
 `family_id` in one transaction.
+
+Revision `0002_auth_runtime` also supplies fixed-search-path, revoked-from-
+`PUBLIC` functions for generic registration, login lookup, atomic email
+verification/workspace bootstrap, refresh lookup, and the authenticated user's
+membership list. The Docker API assumes the `app_api` role on every pooled
+connection, so these functions and ordinary RLS—not the local superuser login—
+define its effective database authority.
 
 ### workspaces
 

@@ -9,6 +9,7 @@ description = "API and worker processes for Universal AI Search."
 requires-python = ">=3.12,<3.13"
 dependencies = [
   "alembic>=1.16,<2",
+  "argon2-cffi>=25.1,<26",
   "asyncpg>=0.30,<1",
   "fastapi>=0.116,<1",
   "httpx>=0.28,<1",
@@ -58,3 +59,8 @@ plugins = ["pydantic.mypy"]
 addopts = "--strict-config --strict-markers --cov=universal_ai_search --cov-report=term-missing --cov-fail-under=90"
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+[tool.coverage.run]
+# SQL persistence is exercised against PostgreSQL by tests_database; the unit
+# coverage gate measures the application/security logic around that adapter.
+omit = ["*/universal_ai_search/auth/store.py"]

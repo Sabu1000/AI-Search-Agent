@@ -59,12 +59,21 @@ def _contract_app() -> FastAPI:
     return app
 
 
-def test_openapi_is_31_and_product_catalog_remains_closed() -> None:
+def test_openapi_is_31_and_only_completed_product_routes_are_open() -> None:
     app = create_app()
     schema = app.openapi()
 
     assert schema["openapi"] == "3.1.0"
-    assert set(schema["paths"]) == {"/health/live", "/health/ready"}
+    assert set(schema["paths"]) == {
+        "/health/live",
+        "/health/ready",
+        "/v1/auth/register",
+        "/v1/auth/email/verify",
+        "/v1/auth/login",
+        "/v1/auth/refresh",
+        "/v1/auth/logout",
+        "/v1/auth/me",
+    }
 
 
 def test_request_id_accepts_and_normalizes_a_valid_uuid() -> None:

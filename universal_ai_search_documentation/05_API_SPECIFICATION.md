@@ -1,7 +1,7 @@
 # API Specification
 
 > **Implementation status:** Specification and shared API platform primitives
-> are complete; `0/49` catalogued `/v1` product endpoints are implemented.
+> are complete; `6/49` catalogued `/v1` product endpoints are implemented.
 > Existing liveness/readiness routes are foundation endpoints outside this
 > catalog. See
 > [`IMPLEMENTATION_STATUS.md`](IMPLEMENTATION_STATUS.md).

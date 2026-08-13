@@ -8,7 +8,7 @@ from pathlib import Path
 from alembic import command
 from alembic.config import Config
 
-EXPECTED_SCHEMA_REVISION = "0001_initial_schema"
+EXPECTED_SCHEMA_REVISION = "0002_auth_runtime"
 
 
 def build_alembic_config() -> Config:

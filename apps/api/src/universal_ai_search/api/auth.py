@@ -8,7 +8,7 @@ from uuid import UUID
 
 from fastapi import Depends, Request
 
-from universal_ai_search.api.models import APIModel
+from universal_ai_search.api.models import APIModel, UtcDateTime
 from universal_ai_search.api.problems import ProblemError
 
 WORKSPACE_HEADER = "X-Workspace-ID"
@@ -27,6 +27,8 @@ class Principal(APIModel):
     subject_id: UUID
     mode: AuthenticationMode
     authorization_version: int
+    session_id: UUID | None = None
+    access_expires_at: UtcDateTime | None = None
 
 
 class WorkspaceContext(APIModel):

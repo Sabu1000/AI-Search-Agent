@@ -58,14 +58,14 @@ do
 done
 
 for truthful_count in \
-  '0/11' \
+  '1/11' \
   '33/33' \
-  '49' \
+  '6/49' \
   '27/30' \
   '12/15' \
   '5/11' \
   '25 tests at 99% line coverage' \
-  '50 tests at 96% line coverage'
+  '61 backend tests at 92.58% line coverage'
 do
   if ! grep -Fq "\`$truthful_count\`" "$status_file"; then
     printf 'ERROR: implementation status is missing audited count: %s\n' \

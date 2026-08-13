@@ -95,6 +95,7 @@ services:
     environment:
       UAS_ENVIRONMENT: ${UAS_ENVIRONMENT:-local}
       UAS_DATABASE_URL: ${UAS_DATABASE_URL:-postgresql+asyncpg://uas:change-me-local@postgres:5432/uas}
+      UAS_DATABASE_ROLE: ${UAS_DATABASE_ROLE:-app_api}
       UAS_REDIS_URL: ${UAS_REDIS_URL:-redis://redis:6379/0}
       UAS_OBJECT_STORAGE_ENDPOINT: ${UAS_OBJECT_STORAGE_ENDPOINT:-http://minio:9000}
       UAS_OBJECT_STORAGE_BUCKET: ${UAS_OBJECT_STORAGE_BUCKET:-universal-ai-search-local}
@@ -102,6 +103,12 @@ services:
       UAS_OBJECT_STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-change-me-local}
       UAS_CURSOR_SIGNING_KEY: ${UAS_CURSOR_SIGNING_KEY:-change-me-local-cursor-signing-key-32-bytes}
       UAS_IDEMPOTENCY_HASH_KEY: ${UAS_IDEMPOTENCY_HASH_KEY:-change-me-local-idempotency-hash-key-32-bytes}
+      UAS_AUTH_SIGNING_KEY: ${UAS_AUTH_SIGNING_KEY:-change-me-local-auth-signing-key-32-bytes}
+      UAS_AUTH_HASH_KEY: ${UAS_AUTH_HASH_KEY:-change-me-local-auth-hash-key-32-bytes}
+      UAS_WEB_ORIGIN: ${UAS_WEB_ORIGIN:-http://localhost:3000}
+      UAS_SMTP_HOST: ${UAS_SMTP_HOST:-mailpit}
+      UAS_SMTP_PORT: ${UAS_SMTP_PORT:-1025}
+      UAS_EMAIL_FROM: ${UAS_EMAIL_FROM:-Universal AI Search <no-reply@localhost>}
     ports:
       - "${API_PORT:-8000}:8000"
     depends_on:
@@ -113,6 +120,8 @@ services:
         condition: service_healthy
       minio-init:
         condition: service_completed_successfully
+      mailpit:
+        condition: service_started
       migrate:
         condition: service_completed_successfully
     healthcheck:

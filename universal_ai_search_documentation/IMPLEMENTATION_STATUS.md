@@ -2,7 +2,7 @@
 
 **Last audited:** 2026-08-12
 
-**Audited baseline:** `3777cc7`; this ledger includes the current `B3` design
+**Audited baseline:** `370ea50`; this ledger includes the current `B4`
 checkpoint.
 
 **Purpose:** Separate validated design specifications from working product
@@ -27,25 +27,25 @@ shells are never counted as finished user features.
 | Stage | Specification | Product implementation | Evidence and remaining work |
 | --- | --- | --- | --- |
 | `00_README.md` | Complete | Partial foundation | Monorepo, CI, Docker Compose, web/API/worker/desktop shells, shared packages, and quality gates work. Branch protection, a license decision, and the Phase 1 review remain open. |
-| `01_PROJECT_SPEC.md` | Complete | Not started as an MVP | The 11 MVP requirements have testable acceptance criteria, but none passes end to end. See the requirement audit below. |
-| `02_SYSTEM_ARCHITECTURE.md` | Complete | Partial | Process shells, local dependencies, schema migration ordering, revision-aware API readiness, and a fail-closed HTTP boundary exist. Durable repositories, working authentication/authorization services, queues, connector orchestration, indexing, search, and answer services do not. |
+| `01_PROJECT_SPEC.md` | Complete | MVP partial (`1/11`) | `AUTH-001` passes end to end; the other 10 MVP requirements remain partial or not started. See the requirement audit below. |
+| `02_SYSTEM_ARCHITECTURE.md` | Complete | Partial | Process shells, local dependencies, schema migration ordering, revision-aware API readiness, a fail-closed HTTP boundary, and database-backed authentication/authorization exist. General repositories, queues, connector orchestration, indexing, search, and answer services do not. |
 | `03_SEARCH_ENGINE_DESIGN.md` | Complete | Not started | No lexical retrieval, vector retrieval, fusion, reranking, context builder, citation builder, grounding evaluator, or search endpoint exists. |
-| `04_DATABASE_SCHEMA.md` | Complete | Database runtime implemented; phase partial | Alembic revision `0001_initial_schema` creates `33/33` specified tables, constraints, indexes, roles, grants, and forced RLS. Compose migrates before API startup; readiness checks the revision; 11 PostgreSQL integration tests cover catalog, lifecycle, and tenant isolation. Seed data, repositories, backup automation, and the Phase 3 review remain. |
-| `05_API_SPECIFICATION.md` | Complete | API platform implemented; product routes not started | FastAPI now has an OpenAPI 3.1 `/v1` router boundary, request IDs, strict serialization, RFC 9457 problems, signed cursor helpers, idempotency primitives, and fail-closed auth/workspace dependency interfaces. `0/49` catalogued product endpoints exist; working auth, rate limiting, SSE, repositories, and feature services remain. |
+| `04_DATABASE_SCHEMA.md` | Complete | Database runtime implemented; phase partial | Alembic revisions `0001_initial_schema` and `0002_auth_runtime` create `33/33` specified tables, auth runtime fields/functions, constraints, indexes, roles, grants, and forced RLS. Compose migrates before API startup; readiness checks the revision; 13 PostgreSQL integration tests cover auth bootstrap, catalog, lifecycle, and tenant isolation. Seed data, non-auth repositories, backup automation, and the Phase 3 review remain. |
+| `05_API_SPECIFICATION.md` | Complete | API platform plus auth routes implemented; product API partial | FastAPI has the OpenAPI 3.1 `/v1` boundary, request IDs, strict serialization, RFC 9457 problems, signed cursors, idempotency primitives, and working authentication/workspace backends. `6/49` catalogued product endpoints exist; rate limiting, SSE, general repositories, and the other feature services remain. |
 | `06_CONNECTOR_FRAMEWORK.md` | Complete | SDK implemented; provider ecosystem partial | The typed SDK, four change variants, registry, retry policy, runtime stream validator, fake connector, Docker gate, and CI job are implemented. Real Gmail, Drive, GitHub, and local-file connectors, OAuth persistence, scheduling, logging, and metrics are not. |
 | `08_SECURITY_AND_PRIVACY.md` | Complete | Partial controls | The threat model, data classification, tenant/cryptographic boundaries, browser/input/model defenses, audit/redaction policy, deletion/backup rules, and security release gates are implementation-ready. Existing RLS, strict API boundaries, secret validation, and containerized tests implement only part of the required controls. |
-| `09_AUTH_AND_OAUTH.md` | Complete | Not started as a working auth flow | Password, email proof, access/refresh, CSRF, reauthentication, workspace policy, OAuth state/PKCE, Google, GitHub App, credential-envelope, revocation, and test contracts are explicit and automatically validated. No registration, login, session repository, OAuth callback, or credential encryption service exists yet. |
+| `09_AUTH_AND_OAUTH.md` | Complete | Authentication subset implemented; provider/recovery work partial | Password registration, email proof, Argon2id, signed access tokens, rotating opaque refresh sessions, replay-family revocation, browser CSRF/origin checks, logout, account/membership lookup, workspace bootstrap, and minimal web UI work end to end. Password recovery, reauthentication, OAuth callbacks, provider credential encryption, abuse throttling, and the full security review remain. |
 
-The next numbered design document is `07_INDEXING_PIPELINE.md`, but it remains
-paused until the authentication vertical slice establishes real principals and
-workspace authority. A document may be the next specification without being
-the next safe implementation task.
+The next numbered design and implementation document is
+`07_INDEXING_PIPELINE.md`. The authentication dependency is now satisfied, so
+the next slice can build a fake-connector-to-index path under real principal
+and workspace authority.
 
 ## MVP requirement audit
 
 | Requirement | Status | Implemented evidence | Missing acceptance path |
 | --- | --- | --- | --- |
-| `AUTH-001` | Partial | User, identity, one-time-token, session, workspace, and membership tables exist behind forced RLS; immutable principal/workspace contracts and rejecting-by-default dependencies are wired into FastAPI. | Password hashing, real authentication and membership backends, session services, register/login/logout UI and APIs, and end-to-end tests. |
+| `AUTH-001` | Implemented | A visitor can register, receive and submit a single-use email proof, receive an owner workspace, log in, inspect memberships, rotate a session, log out, and sign back in through the minimal web UI and six `/v1/auth` endpoints. Argon2id, generic failures, signed 15-minute JWT access tokens, hashed opaque refresh/CSRF tokens, exact-origin CSRF checks, non-superuser RLS, route/unit/database tests, and the Docker smoke test cover the acceptance path. | No missing MVP acceptance path. Password recovery, OAuth login, rate limiting, reauthentication, and the complete Phase 2 security review are later hardening/expansion tasks. |
 | `DESKTOP-001` | Partial | Tauri React/Rust shell compiles and is container-checked. | Signed installers, folder selection, root authorization, scanner/watcher, device registration, offline queue, removal/deletion flow, and platform tests. |
 | `GOOGLE-001` | Not started | Canonical SDK provider contracts only. | OAuth scopes/callbacks, encrypted credentials, Gmail and Drive clients, selections, full/incremental sync, revocation, UI, and provider contract tests. |
 | `GITHUB-001` | Not started | Canonical SDK provider contract only. | GitHub App, installation/repository selection, API client, webhooks, reconciliation, access removal, UI, and provider contract tests. |
@@ -55,9 +55,9 @@ the next safe implementation task.
 | `CITATION-001` | Partial | Claim and citation tables enforce same-workspace message/source/version/chunk lineage. | Citation builder, authorization recheck, safe target opening, API/UI rendering, and correctness tests. |
 | `CONNECTION-001` | Partial | Connection, scope, cursor, deletion, job, and outbox storage exists; the SDK has deletion and permission-change events. | Credential services, revocation, sync cancellation, cascade workers, progress API/UI, 24-hour enforcement, and end-to-end tests. |
 | `ACCOUNT-001` | Partial | Workspace state and durable deletion-request/job/outbox/audit storage exist. | Immediate access-termination service, cascade workers, receipt/status, export, backup-retention handling, and deadline alerts/tests. |
-| `SAFETY-001` | Partial | Product and SDK are structurally read-only; strict API models reject unknown input; privacy-safe problems avoid echoing inputs and internal errors; auth/workspace dependencies reject by default; signed cursors and idempotency hashes bind principal/workspace context; identity and tenant tables use tested forced RLS. | Working authorization backends, content sanitization boundaries, prompt-injection fixtures through retrieval/answering, log redaction, and full cross-user service tests. |
+| `SAFETY-001` | Partial | Product and SDK are structurally read-only; strict API models reject unknown input; privacy-safe problems avoid echoing inputs and internal errors; database-backed auth/workspace dependencies fail closed; signed cursors and idempotency hashes bind principal/workspace context; identity and tenant tables use tested forced RLS. | Content sanitization boundaries, prompt-injection fixtures through retrieval/answering, log redaction, and full cross-user service tests. |
 
-Current end-to-end MVP acceptance: `0/11` requirements. Partial means useful
+Current end-to-end MVP acceptance: `1/11` requirements. Partial means useful
 prerequisite code exists; it does not increase the end-to-end count.
 
 ## Implemented code inventory
@@ -108,10 +108,10 @@ logging, metrics, and the Phase 4 review remain open.
 - `app_api`, `app_worker`, and `app_audit_reader` are non-login,
   non-`BYPASSRLS` roles. Identity and tenant tables use forced, fail-closed RLS.
 - Compose runs migrations to completion before starting the API, and readiness
-  rejects any revision other than `0001_initial_schema`.
+  rejects any revision other than `0002_auth_runtime`.
 - An ephemeral PostgreSQL 16/pgvector Docker suite runs Python quality gates
-  and `11` catalog, migration-lifecycle, foreign-key, and tenant-isolation
-  tests in CI.
+  and `13` authentication, catalog, migration-lifecycle, foreign-key, and
+  tenant-isolation tests in CI.
 
 Database master tasks complete: `12/15`: `P3-001` through `P3-012`. Seed data,
 backup implementation, and the Phase 3 review remain open. These tables are
@@ -120,8 +120,9 @@ user-visible workflows.
 
 ### API platform
 
-- FastAPI publishes OpenAPI 3.1, mounts an intentionally empty `/v1` router,
-  and keeps all `49` product operations closed until their services exist.
+- FastAPI publishes OpenAPI 3.1 and mounts a `/v1` router with six implemented
+  authentication operations; the other 43 product operations stay closed
+  until their services exist.
 - Every response receives a canonical UUID request ID; valid caller IDs are
   normalized and invalid IDs are replaced.
 - Strict request/response models enforce unknown-field rejection, canonical
@@ -135,30 +136,55 @@ user-visible workflows.
   request context, define atomic reservation/replay storage contracts, and
   prevent credential, content, and signed-URL persistence in replay payloads.
 - Immutable principal/workspace models and dependency protocols are wired to
-  rejecting-by-default backends so unfinished authentication cannot grant
-  access accidentally.
+  database-backed authentication and membership checks; missing or invalid
+  authority is rejected.
 - Compose passes independent cursor/idempotency secrets; settings reject short,
   shared, or local-only production values.
-- `50 tests at 96% line coverage` exercise platform contracts; Black, Ruff,
-  and mypy run in the backend Docker gate.
+- The combined backend gate reports its current test and coverage totals below;
+  Black, Ruff, and strict mypy run in the same Docker target.
 
-No API master task is marked complete: the Stage 05 implementation is shared
-infrastructure, while the catalogued tasks require working feature endpoints.
+### Authentication vertical slice
+
+- Argon2id password hashing uses 64 MiB, three iterations, parallelism one,
+  dummy-hash verification for unknown users, identity/common-password checks,
+  and opportunistic rehashing.
+- Generic registration stores terms/locale and sends a 24-hour, single-use
+  verification URL to SMTP; verification atomically activates the user and
+  creates a personal owner workspace.
+- HMAC-signed HS256 JWT access tokens carry only identity/session/version
+  claims and expire after 15 minutes. Opaque refresh and CSRF values are stored
+  only as keyed hashes; refresh rotates the session and replay revokes its
+  family.
+- Browser transport uses exact `__Host-` Secure cookie attributes plus
+  double-submit, session-bound CSRF and exact-origin checks. Native transport
+  returns access/refresh credentials only on login or refresh. Mixed cookie and
+  bearer authentication is rejected.
+- The API runs with effective role `app_api`; scoped security-definer bootstrap
+  functions and forced RLS protect account, session, and membership reads.
+- Six catalogued endpoints implement register, email verification, login,
+  refresh, logout, and `me`; the Next.js page provides their minimal UI.
+- `61 backend tests at 92.58% line coverage`, `13 PostgreSQL integration tests`,
+  web checks, production builds, Docker health checks, and
+  `scripts/smoke-auth.py` cover the slice.
+
+Authentication master tasks complete: `12/18`: `P2-001` through `P2-007`,
+`P2-010`, and `P2-013` through `P2-016`. Password recovery, Google/GitHub login,
+the full security review, and the Phase 2 review remain open.
 
 ## Explicitly unimplemented inventory
 
 The following do not exist in production code yet:
 
-- SQLAlchemy models/repositories, transaction services, or seed data for the
-  migrated schema.
-- Account registration, login, sessions, working authentication/authorization
-  backends, OAuth, or encrypted provider credential storage.
+- General SQLAlchemy models/repositories, transaction services, or seed data
+  outside the implemented authentication store.
+- Password recovery, reauthentication, OAuth, encrypted provider credential
+  storage, authentication abuse throttling, and account profile editing.
 - Any real provider client or provider data synchronization.
 - Extraction, parsing, chunking, embedding, deduplication, or indexing workers.
 - Keyword, vector, hybrid, filtered, or reranked search.
 - Conversations, model calls, streamed answers, grounding, or citations.
-- Product `/v1` endpoints, web dashboard, search/chat UI, connection UI, or
-  source browser.
+- The other 43 product `/v1` endpoints, web dashboard, search/chat UI,
+  connection UI, or source browser.
 - Desktop folder selection, scanner, watcher, manifest sync, or offline queue.
 - Disconnect/account deletion workflows, billing, production deployment, or
   operational dashboards.
@@ -174,15 +200,15 @@ define design ownership:
 | `B1` | Stage 04 database runtime | Migration toolchain; all 33 specified tables/types/constraints/indexes; tenant RLS; upgrade/downgrade and schema-contract tests against PostgreSQL/pgvector; documented rollback. |
 | `B2` | Stage 05 API platform primitives | Versioned router, RFC 9457 problem details, request IDs, serialization, cursor helpers, idempotency primitives, auth/workspace dependency interfaces, and contract tests. Product endpoints remain closed until their services exist. |
 | `B3` | Stage 08/09 security and auth design checkpoint | Complete the owning security/auth specifications before implementing credentials, sessions, authorization middleware, and OAuth. **Complete:** both documents now define implementation-ready controls and test matrices enforced by `validate-security-auth.sh`. |
-| `B4` | Authentication vertical slice | Users, password/session security, register/login/refresh/logout/me endpoints and minimal UI with integration tests. |
+| `B4` | Authentication vertical slice | **Complete:** users, password/session security, register/verify/login/refresh/logout/me endpoints, workspace bootstrap, minimal UI, PostgreSQL tests, and a live Docker smoke test. |
 | `B5` | Stage 07 indexing design and implementation | Extraction/chunking/deduplication/embedding queue contracts and an end-to-end fake-connector-to-index path. |
 | `B6` | Stage 03 search implementation | Tenant-safe FTS/vector retrieval, fusion, filters, ranking, context, citations, API, and evaluation tests. |
 | `B7` | Real provider and desktop slices | Google, GitHub, then local desktop behavior, each certified by the Connector SDK suite and integrated end to end. |
 
 The active backfill item is always the first unfinished row. Backfills `B0`,
-`B1`, `B2`, and `B3` are complete; `B4` is next. No later slice may be reported
-complete because a model, interface, fake, document, or application shell
-exists.
+`B1`, `B2`, `B3`, and `B4` are complete; `B5` is next. No later slice may be
+reported complete because a model, interface, fake, document, or application
+shell exists.
 
 ## Evidence commands
 
@@ -196,6 +222,7 @@ pnpm build
 ./scripts/test-database.sh
 ./scripts/test-desktop-rust.sh
 docker compose build api web
+python3 scripts/smoke-auth.py
 ```
 
 Every backfill commit must update this ledger, run the checks relevant to its

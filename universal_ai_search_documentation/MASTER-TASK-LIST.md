@@ -4,9 +4,10 @@
 
 **Version:** 1.0
 
-**Status:** In progress — specifications 00 through 06 are validated;
-foundation is `27/30`, Connector SDK is `5/11`, and end-to-end MVP acceptance
-is `0/11`. See [`IMPLEMENTATION_STATUS.md`](IMPLEMENTATION_STATUS.md) for
+**Status:** In progress — specifications 00 through 06 and 08/09 are validated;
+foundation is `27/30`, authentication is `12/18`, Connector SDK is `5/11`, and
+end-to-end MVP acceptance is `1/11`. See
+[`IMPLEMENTATION_STATUS.md`](IMPLEMENTATION_STATUS.md) for
 evidence, missing features, and active backfill order.
 
 ---
@@ -84,22 +85,22 @@ Rules:
 
 # Phase 2 — Authentication
 
-- [ ] P2-001 User model
-- [ ] P2-002 Password hashing
-- [ ] P2-003 JWT authentication
-- [ ] P2-004 Refresh tokens
-- [ ] P2-005 Register endpoint
-- [ ] P2-006 Login endpoint
-- [ ] P2-007 Logout endpoint
+- [x] P2-001 User model
+- [x] P2-002 Password hashing
+- [x] P2-003 JWT authentication
+- [x] P2-004 Refresh tokens
+- [x] P2-005 Register endpoint
+- [x] P2-006 Login endpoint
+- [x] P2-007 Logout endpoint
 - [ ] P2-008 Forgot password
 - [ ] P2-009 Reset password
-- [ ] P2-010 Email verification
+- [x] P2-010 Email verification
 - [ ] P2-011 Google OAuth
 - [ ] P2-012 GitHub OAuth (login)
-- [ ] P2-013 Session management
-- [ ] P2-014 User profile API
-- [ ] P2-015 Authentication middleware
-- [ ] P2-016 Authorization middleware
+- [x] P2-013 Session management
+- [x] P2-014 User profile API
+- [x] P2-015 Authentication middleware
+- [x] P2-016 Authorization middleware
 - [ ] P2-017 Security review
 - [ ] P2-018 Phase review
 

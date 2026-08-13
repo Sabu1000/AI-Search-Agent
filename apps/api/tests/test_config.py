@@ -32,6 +32,8 @@ def test_production_accepts_independent_api_platform_secrets() -> None:
         environment="production",
         cursor_signing_key="production-cursor-signing-key-one",
         idempotency_hash_key="production-idempotency-hash-key-two",
+        auth_signing_key="production-auth-signing-key-three",
+        auth_hash_key="production-auth-hash-key-number-four",
     )
 
     assert settings.environment == "production"
