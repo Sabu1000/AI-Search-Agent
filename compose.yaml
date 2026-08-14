@@ -105,6 +105,12 @@ services:
       UAS_IDEMPOTENCY_HASH_KEY: ${UAS_IDEMPOTENCY_HASH_KEY:-change-me-local-idempotency-hash-key-32-bytes}
       UAS_AUTH_SIGNING_KEY: ${UAS_AUTH_SIGNING_KEY:-change-me-local-auth-signing-key-32-bytes}
       UAS_AUTH_HASH_KEY: ${UAS_AUTH_HASH_KEY:-change-me-local-auth-hash-key-32-bytes}
+      UAS_OAUTH_HASH_KEY: ${UAS_OAUTH_HASH_KEY:-change-me-local-oauth-hash-key-32-bytes}
+      UAS_PROVIDER_ENCRYPTION_KEY: ${UAS_PROVIDER_ENCRYPTION_KEY:-change-me-local-provider-encryption-key-32-bytes}
+      UAS_GOOGLE_OAUTH_ENABLED: ${UAS_GOOGLE_OAUTH_ENABLED:-false}
+      UAS_GOOGLE_CLIENT_ID: ${UAS_GOOGLE_CLIENT_ID:-}
+      UAS_GOOGLE_CLIENT_SECRET: ${UAS_GOOGLE_CLIENT_SECRET:-}
+      UAS_GOOGLE_REDIRECT_URI: ${UAS_GOOGLE_REDIRECT_URI:-http://localhost:8000/v1/connections/google/callback}
       UAS_WEB_ORIGIN: ${UAS_WEB_ORIGIN:-http://localhost:3000}
       UAS_SMTP_HOST: ${UAS_SMTP_HOST:-mailpit}
       UAS_SMTP_PORT: ${UAS_SMTP_PORT:-1025}
@@ -150,6 +156,8 @@ services:
       UAS_IDEMPOTENCY_HASH_KEY: ${UAS_IDEMPOTENCY_HASH_KEY:-change-me-local-idempotency-hash-key-32-bytes}
       UAS_AUTH_SIGNING_KEY: ${UAS_AUTH_SIGNING_KEY:-change-me-local-auth-signing-key-32-bytes}
       UAS_AUTH_HASH_KEY: ${UAS_AUTH_HASH_KEY:-change-me-local-auth-hash-key-32-bytes}
+      UAS_OAUTH_HASH_KEY: ${UAS_OAUTH_HASH_KEY:-change-me-local-oauth-hash-key-32-bytes}
+      UAS_PROVIDER_ENCRYPTION_KEY: ${UAS_PROVIDER_ENCRYPTION_KEY:-change-me-local-provider-encryption-key-32-bytes}
     depends_on:
       migrate:
         condition: service_completed_successfully

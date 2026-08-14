@@ -8,6 +8,8 @@ _LOCAL_CURSOR_SIGNING_KEY = "local-cursor-signing-key-change-before-production"
 _LOCAL_IDEMPOTENCY_HASH_KEY = "local-idempotency-hash-key-change-before-production"
 _LOCAL_AUTH_SIGNING_KEY = "local-auth-signing-key-change-before-production"
 _LOCAL_AUTH_HASH_KEY = "local-auth-hash-key-change-before-production"
+_LOCAL_OAUTH_HASH_KEY = "local-oauth-hash-key-change-before-production"
+_LOCAL_PROVIDER_ENCRYPTION_KEY = "local-provider-key-change-before-production"
 
 
 class Settings(BaseSettings):
@@ -32,6 +34,12 @@ class Settings(BaseSettings):
     idempotency_hash_key: SecretStr = SecretStr(_LOCAL_IDEMPOTENCY_HASH_KEY)
     auth_signing_key: SecretStr = SecretStr(_LOCAL_AUTH_SIGNING_KEY)
     auth_hash_key: SecretStr = SecretStr(_LOCAL_AUTH_HASH_KEY)
+    oauth_hash_key: SecretStr = SecretStr(_LOCAL_OAUTH_HASH_KEY)
+    provider_encryption_key: SecretStr = SecretStr(_LOCAL_PROVIDER_ENCRYPTION_KEY)
+    google_oauth_enabled: bool = False
+    google_client_id: str = ""
+    google_client_secret: SecretStr = SecretStr("")
+    google_redirect_uri: str = "http://localhost:8000/v1/connections/google/callback"
     web_origin: str = "http://localhost:3000"
     smtp_host: str = "localhost"
     smtp_port: int = 1025
@@ -43,7 +51,16 @@ class Settings(BaseSettings):
         idempotency_key = self.idempotency_hash_key.get_secret_value()
         auth_signing_key = self.auth_signing_key.get_secret_value()
         auth_hash_key = self.auth_hash_key.get_secret_value()
-        secret_values = (cursor_key, idempotency_key, auth_signing_key, auth_hash_key)
+        oauth_hash_key = self.oauth_hash_key.get_secret_value()
+        provider_key = self.provider_encryption_key.get_secret_value()
+        secret_values = (
+            cursor_key,
+            idempotency_key,
+            auth_signing_key,
+            auth_hash_key,
+            oauth_hash_key,
+            provider_key,
+        )
         if any(len(value.encode()) < 32 for value in secret_values):
             raise ValueError("API platform secrets must be at least 32 bytes")
         if len(set(secret_values)) != len(secret_values):
@@ -53,10 +70,17 @@ class Settings(BaseSettings):
             or idempotency_key == _LOCAL_IDEMPOTENCY_HASH_KEY
             or auth_signing_key == _LOCAL_AUTH_SIGNING_KEY
             or auth_hash_key == _LOCAL_AUTH_HASH_KEY
+            or oauth_hash_key == _LOCAL_OAUTH_HASH_KEY
+            or provider_key == _LOCAL_PROVIDER_ENCRYPTION_KEY
         ):
             raise ValueError(
                 "local-only API platform secrets cannot be used outside development"
             )
+        if self.google_oauth_enabled and (
+            not self.google_client_id.strip()
+            or not self.google_client_secret.get_secret_value()
+        ):
+            raise ValueError("Google OAuth credentials are required when enabled")
         return self
 
 

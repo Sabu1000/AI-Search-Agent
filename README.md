@@ -11,23 +11,24 @@ separately so a validated design is never presented as working product code.
 
 ## Current status
 
-- Specification status: `00_README.md` through `06_CONNECTOR_FRAMEWORK.md`,
-  plus the dependency-safe Stage 08/09 security and authentication checkpoint,
-  are validated
+- Specification status: the numbered design set is validated; implementation
+  evidence is tracked separately in the status ledger
 - Implementation status: foundation is partial (`27/30` master tasks), the
   authentication phase is partial (`12/18` master tasks), the database phase
-  is partial (`12/15` master tasks), the Connector SDK is partial (`5/11`
-  master tasks), and end-to-end MVP acceptance is `1/11`
-- Backfill status: database runtime `B1`, API platform primitives `B2`, and the
-  Stage 08/09 security/authentication design checkpoint `B3`, and the
-  authentication vertical slice `B4` are complete
-- Next numbered specification and implementation slice:
-  `07_INDEXING_PIPELINE.md` (`B5`)
+  is partial (`12/15` master tasks), the connector framework is partial (`7/11`
+  master tasks), indexing is complete for normalized text/Markdown (`10/10`),
+  search is complete for the local-index backend (`9/9`), and end-to-end MVP
+  acceptance is `1/11`
+- Backfill status: `B0` through `B6` are complete; `B7` is active, with Google
+  authorization and the durable initial-sync handoff implemented
+- Next implementation slice: the Gmail content client and sync-job consumer
 - Product status: tested project foundation, an implemented 33-table
   PostgreSQL schema with forced tenant RLS, an implemented Python connector
   SDK, a tested fail-closed API platform layer, and a working six-endpoint
-  email/password authentication flow with a minimal web UI; indexing, search,
-  providers, and the remaining 43 product endpoints remain to be built
+  email/password authentication flow with a minimal web UI, durable indexing,
+  tenant-safe hybrid search, and Google OAuth connection authorization; Google
+  content synchronization, provider UIs, and the remaining 40 product
+  endpoints remain to be built
 - Safety boundary: version 1 is read-only; retrieved content is untrusted data
   and cannot trigger actions
 
@@ -116,6 +117,28 @@ login, workspace discovery, token rotation, and logout end to end with:
 ```sh
 python3 scripts/smoke-auth.py
 ```
+
+### Optional Google authorization setup
+
+Google connection authorization is disabled by default, so the normal local
+stack and CI never require real provider secrets. To exercise it against a
+Google Cloud test project, enable the Gmail and Drive APIs, create a Web OAuth
+client with this exact local callback URI, and set the following only in the
+untracked `.env` file:
+
+```text
+UAS_GOOGLE_OAUTH_ENABLED=true
+UAS_GOOGLE_CLIENT_ID=your-client-id
+UAS_GOOGLE_CLIENT_SECRET=your-client-secret
+UAS_GOOGLE_REDIRECT_URI=http://localhost:8000/v1/connections/google/callback
+```
+
+The API requests only pinned Gmail/Drive read-only scopes and refuses missing
+or unexpected grants. Google classifies these broad read-only scopes as
+restricted, so public deployment requires its OAuth verification and security
+review. This checkpoint authorizes and stores the connection, then creates a
+durable full-sync job; the Gmail/Drive content worker that consumes that job is
+the next implementation slice.
 
 ## Docker foundation
 

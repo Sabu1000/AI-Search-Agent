@@ -19,6 +19,10 @@ from universal_ai_search.auth.security import AccessTokenCodec, PasswordSecurity
 from universal_ai_search.auth.service import AuthenticationService
 from universal_ai_search.auth.store import SQLAlchemyAuthStore
 from universal_ai_search.config import Settings, get_settings
+from universal_ai_search.connections.crypto import LocalEnvelopeEncryption
+from universal_ai_search.connections.google import HttpGoogleGateway
+from universal_ai_search.connections.service import GoogleConnectionService
+from universal_ai_search.connections.store import SQLAlchemyGoogleConnectionStore
 from universal_ai_search.search.repository import SearchRepository
 from universal_ai_search.search.service import SearchService
 
@@ -67,6 +71,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         service
     )
     app.state.search_service = SearchService(SearchRepository(engine))
+    app.state.google_connection_service = GoogleConnectionService(
+        store=SQLAlchemyGoogleConnectionStore(engine),
+        gateway=HttpGoogleGateway(
+            client_id=runtime_settings.google_client_id,
+            client_secret=runtime_settings.google_client_secret.get_secret_value(),
+            redirect_uri=runtime_settings.google_redirect_uri,
+        ),
+        encryption=LocalEnvelopeEncryption(
+            runtime_settings.provider_encryption_key.get_secret_value().encode()
+        ),
+        hash_key=runtime_settings.oauth_hash_key.get_secret_value().encode(),
+        enabled=runtime_settings.google_oauth_enabled,
+    )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[runtime_settings.web_origin],

@@ -34,6 +34,16 @@ def test_production_accepts_independent_api_platform_secrets() -> None:
         idempotency_hash_key="production-idempotency-hash-key-two",
         auth_signing_key="production-auth-signing-key-three",
         auth_hash_key="production-auth-hash-key-number-four",
+        oauth_hash_key="production-oauth-hash-key-number-five",
+        provider_encryption_key="production-provider-key-number-six",
     )
 
     assert settings.environment == "production"
+
+
+def test_google_oauth_requires_credentials_only_when_enabled() -> None:
+    settings = Settings(_env_file=None, google_oauth_enabled=False)
+    assert settings.google_client_id == ""
+
+    with pytest.raises(ValidationError, match="Google OAuth credentials"):
+        Settings(_env_file=None, google_oauth_enabled=True)

@@ -133,8 +133,8 @@ Rules:
 # Phase 4 — Connector SDK
 
 - [x] P4-001 BaseConnector interface
-- [ ] P4-002 OAuth manager
-- [ ] P4-003 Token storage
+- [x] P4-002 OAuth manager
+- [x] P4-003 Token storage
 - [x] P4-004 Connector registry
 - [ ] P4-005 Job scheduler
 - [x] P4-006 Retry framework
@@ -150,7 +150,7 @@ Rules:
 
 # Phase 5 — Gmail Connector
 
-- [ ] P5-001 Google OAuth scopes
+- [x] P5-001 Google OAuth scopes
 - [ ] P5-002 Gmail API client
 - [ ] P5-003 Initial sync
 - [ ] P5-004 Incremental sync
@@ -169,7 +169,7 @@ Rules:
 # Phase 6 — Google Drive
 
 - [ ] P6-001 Drive API client
-- [ ] P6-002 OAuth scopes
+- [x] P6-002 OAuth scopes
 - [ ] P6-003 Folder sync
 - [ ] P6-004 PDF support
 - [ ] P6-005 DOCX support
