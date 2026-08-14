@@ -1,7 +1,7 @@
 # API Specification
 
 > **Implementation status:** Specification and shared API platform primitives
-> are complete; `6/49` catalogued `/v1` product endpoints are implemented.
+> are complete; `7/49` catalogued `/v1` product endpoints are implemented.
 > Existing liveness/readiness routes are foundation endpoints outside this
 > catalog. See
 > [`IMPLEMENTATION_STATUS.md`](IMPLEMENTATION_STATUS.md).
@@ -23,9 +23,9 @@ authentication and provider consent details to
 [`09_AUTH_AND_OAUTH.md`](09_AUTH_AND_OAUTH.md), and desktop filesystem behavior
 to [`10_DESKTOP_AGENT.md`](10_DESKTOP_AGENT.md).
 
-The contracts and dependency-safe shared platform are implemented now. Product
-route implementations and generated clients are added in their feature phases
-after dependent security and provider stages are complete.
+The contracts and dependency-safe shared platform are implemented now. The
+authentication routes and hybrid search route are integrated; remaining product
+routes and generated clients are added in their feature phases.
 
 ## Protocol and base conventions
 

@@ -106,7 +106,8 @@ def simhash64(chunk_tokens: tuple[str, ...]) -> int:
     return result
 
 
-def _embedding(value: str) -> tuple[float, ...]:
+def embed_text(value: str) -> tuple[float, ...]:
+    """Return the deterministic local embedding used by indexing and search."""
     values: list[float] = []
     counter = 0
     while len(values) < EMBEDDING_DIMENSIONS:
@@ -256,7 +257,7 @@ class IndexingPipeline:
                     end_offset=end,
                     search_config=search_config,
                     simhash=fingerprint,
-                    embedding=_embedding(content),
+                    embedding=embed_text(content),
                 )
             )
             if len(chunks) > MAX_CHUNKS:

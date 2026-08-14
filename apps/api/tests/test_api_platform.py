@@ -73,6 +73,7 @@ def test_openapi_is_31_and_only_completed_product_routes_are_open() -> None:
         "/v1/auth/refresh",
         "/v1/auth/logout",
         "/v1/auth/me",
+        "/v1/search",
     }
 
 

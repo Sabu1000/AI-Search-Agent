@@ -1,7 +1,10 @@
 # Search Engine Design
 
-> **Implementation status:** Specification complete; search engine production
-> code is not started. See
+> **Implementation status:** The tenant-safe local-index search backend is
+> implemented. It includes deterministic planning, exact/FTS/vector/trigram
+> retrieval, weighted fusion, filters, ranking, context selection, extractive
+> grounded citations, search history, and `POST /v1/search`. Production model
+> synthesis, a labeled relevance corpus, and the search UI remain later work. See
 > [`IMPLEMENTATION_STATUS.md`](IMPLEMENTATION_STATUS.md).
 
 ## Goals and scope

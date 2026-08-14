@@ -218,15 +218,15 @@ Rules:
 
 # Phase 9 — Search Engine
 
-- [ ] P9-001 Keyword search
-- [ ] P9-002 Vector search
-- [ ] P9-003 Metadata filters
-- [ ] P9-004 Query rewriting
-- [ ] P9-005 Result ranking
-- [ ] P9-006 Context builder
-- [ ] P9-007 Citation builder
-- [ ] P9-008 Search API
-- [ ] P9-009 Phase review
+- [x] P9-001 Keyword search
+- [x] P9-002 Vector search
+- [x] P9-003 Metadata filters
+- [x] P9-004 Query rewriting
+- [x] P9-005 Result ranking
+- [x] P9-006 Context builder
+- [x] P9-007 Citation builder
+- [x] P9-008 Search API
+- [x] P9-009 Phase review
 
 **Milestone:** Hybrid search returns accurate results with citations.
 

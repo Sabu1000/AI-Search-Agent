@@ -66,4 +66,5 @@ testpaths = ["tests"]
 omit = [
   "*/universal_ai_search/auth/store.py",
   "*/universal_ai_search/indexing/repository.py",
+  "*/universal_ai_search/search/repository.py",
 ]

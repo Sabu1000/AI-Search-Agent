@@ -2,7 +2,7 @@
 
 **Last audited:** 2026-08-13
 
-**Audited baseline:** `d2d6366`; this ledger includes the current `B5`
+**Audited baseline:** `5588076`; this ledger includes the current `B6`
 checkpoint changes.
 
 **Purpose:** Separate validated design specifications from working product
@@ -28,18 +28,18 @@ shells are never counted as finished user features.
 | --- | --- | --- | --- |
 | `00_README.md` | Complete | Partial foundation | Monorepo, CI, Docker Compose, web/API/worker/desktop shells, shared packages, and quality gates work. Branch protection, a license decision, and the Phase 1 review remain open. |
 | `01_PROJECT_SPEC.md` | Complete | MVP partial (`1/11`) | `AUTH-001` passes end to end; the other 10 MVP requirements remain partial or not started. See the requirement audit below. |
-| `02_SYSTEM_ARCHITECTURE.md` | Complete | Partial | Process shells, local dependencies, schema migration ordering, revision-aware API readiness, a fail-closed HTTP boundary, and database-backed authentication/authorization exist. General repositories, queues, connector orchestration, indexing, search, and answer services do not. |
-| `03_SEARCH_ENGINE_DESIGN.md` | Complete | Not started | No lexical retrieval, vector retrieval, fusion, reranking, context builder, citation builder, grounding evaluator, or search endpoint exists. |
-| `04_DATABASE_SCHEMA.md` | Complete | Database runtime implemented; phase partial | Alembic revisions `0001_initial_schema` and `0002_auth_runtime` create `33/33` specified tables, auth runtime fields/functions, constraints, indexes, roles, grants, and forced RLS. Compose migrates before API startup; readiness checks the revision; 13 PostgreSQL integration tests cover auth bootstrap, catalog, lifecycle, and tenant isolation. Seed data, non-auth repositories, backup automation, and the Phase 3 review remain. |
-| `05_API_SPECIFICATION.md` | Complete | API platform plus auth routes implemented; product API partial | FastAPI has the OpenAPI 3.1 `/v1` boundary, request IDs, strict serialization, RFC 9457 problems, signed cursors, idempotency primitives, and working authentication/workspace backends. `6/49` catalogued product endpoints exist; rate limiting, SSE, general repositories, and the other feature services remain. |
+| `02_SYSTEM_ARCHITECTURE.md` | Complete | Partial | Process shells, local dependencies, schema migration ordering, revision-aware API readiness, a fail-closed HTTP boundary, database-backed authentication/authorization, durable indexing, and hybrid search exist. Real connector orchestration, model streaming, and remaining product services do not. |
+| `03_SEARCH_ENGINE_DESIGN.md` | Complete | Local-index backend implemented; product phase partial | Exact/title, PostgreSQL FTS, pgvector, and trigram lanes run inside API-role RLS; typed filters, weighted RRF, deterministic reranking/deduplication, bounded context, extractive claims/citations, history persistence, safe empty answers, and `/v1/search` pass unit and live PostgreSQL tests. Production semantic/model adapters, relevance evaluation corpus, conflict evaluator, cache, and UI remain. |
+| `04_DATABASE_SCHEMA.md` | Complete | Database runtime implemented; phase partial | Alembic creates `33/33` specified tables, runtime functions, constraints, indexes, roles, grants, and forced RLS. Compose migrates before API startup; readiness checks the revision; 17 PostgreSQL integration tests cover auth, indexing/search, catalog, lifecycle, and tenant isolation. Seed data, backup automation, and the Phase 3 review remain. |
+| `05_API_SPECIFICATION.md` | Complete | API platform, auth, and search route implemented; product API partial | FastAPI has the OpenAPI 3.1 `/v1` boundary, request IDs, strict serialization, RFC 9457 problems, signed cursors, idempotency primitives, and working authentication/workspace backends. `7/49` catalogued product endpoints exist; rate limiting, SSE, remaining repositories, and other feature services remain. |
 | `06_CONNECTOR_FRAMEWORK.md` | Complete | SDK implemented; provider ecosystem partial | The typed SDK, four change variants, registry, retry policy, runtime stream validator, fake connector, Docker gate, and CI job are implemented. Real Gmail, Drive, GitHub, and local-file connectors, OAuth persistence, scheduling, logging, and metrics are not. |
 | `07_INDEXING_PIPELINE.md` | Complete | Normalized text/Markdown path implemented | Deterministic normalization, language selection, structural chunking, exact/near deduplication, local 1,536-dimensional embeddings, durable PostgreSQL leasing, atomic promotion, unchanged skips, and re-index supersession pass unit and PostgreSQL/pgvector tests. Provider-specific binary parsers and production embedding providers remain later integrations. |
 | `08_SECURITY_AND_PRIVACY.md` | Complete | Partial controls | The threat model, data classification, tenant/cryptographic boundaries, browser/input/model defenses, audit/redaction policy, deletion/backup rules, and security release gates are implementation-ready. Existing RLS, strict API boundaries, secret validation, and containerized tests implement only part of the required controls. |
 | `09_AUTH_AND_OAUTH.md` | Complete | Authentication subset implemented; provider/recovery work partial | Password registration, email proof, Argon2id, signed access tokens, rotating opaque refresh sessions, replay-family revocation, browser CSRF/origin checks, logout, account/membership lookup, workspace bootstrap, and minimal web UI work end to end. Password recovery, reauthentication, OAuth callbacks, provider credential encryption, abuse throttling, and the full security review remain. |
 
-The next numbered implementation document is `03_SEARCH_ENGINE_DESIGN.md`
-through backfill `B6`. Stage 07 now supplies the ready chunks and embeddings
-that tenant-safe hybrid retrieval will consume.
+The next implementation slice is provider and desktop integration through
+backfill `B7`. Stage 03 now consumes Stage 07 ready chunks and embeddings through
+the authenticated API and records each search under forced tenant RLS.
 
 ## MVP requirement audit
 
@@ -50,9 +50,9 @@ that tenant-safe hybrid retrieval will consume.
 | `GOOGLE-001` | Not started | Canonical SDK provider contracts only. | OAuth scopes/callbacks, encrypted credentials, Gmail and Drive clients, selections, full/incremental sync, revocation, UI, and provider contract tests. |
 | `GITHUB-001` | Not started | Canonical SDK provider contract only. | GitHub App, installation/repository selection, API client, webhooks, reconciliation, access removal, UI, and provider contract tests. |
 | `SYNC-001` | Partial | SDK defines deterministic changes and the indexing path has durable idempotent PostgreSQL jobs, worker leases/attempts, stale-lease recovery, bounded errors, and unchanged skips. | Durable provider cursors, provider scheduler/orchestration, status APIs/UI, complete replay tests, and operational metrics. |
-| `SEARCH-001` | Partial | Immutable ready source/version/chunk records, generated FTS, deterministic local vectors, filtered metadata, and HNSW storage now work through the fake connector. | Authorized retrieval repositories, production semantic embeddings, filters, fusion/ranking, API, UI states, evaluation data, and search-level isolation tests. |
-| `ANSWER-001` | Not started | Answer/grounding behavior is specified only. | Model gateway, context construction, streaming generation, claim support checks, insufficient-evidence behavior, UI, and evaluation. |
-| `CITATION-001` | Partial | Claim and citation tables enforce same-workspace message/source/version/chunk lineage. | Citation builder, authorization recheck, safe target opening, API/UI rendering, and correctness tests. |
+| `SEARCH-001` | Partial | Authorized exact, FTS, vector, and trigram retrieval, typed provider/person/date/repository/folder/source/file filters, fusion, ranking, safe empty results, history, and API/database isolation tests work against indexed content. | Real connected providers, UI result/filter states, production semantic embeddings, and a labeled retrieval evaluation corpus. |
+| `ANSWER-001` | Partial | Bounded authorized context produces extractive material claims with one-to-one citations and an explicit `no_authorized_results` insufficient-evidence response. | Production model gateway, synthesis/conflict evaluator, streaming UI, and measured grounding evaluation. |
+| `CITATION-001` | Partial | The API derives excerpts and allowlisted HTTPS targets from authorized stored metadata, links claims to stable source/chunk IDs, and omits unavailable targets. | UI rendering/opening, target reauthorization endpoint, revoked-target end-to-end tests, and measured citation correctness. |
 | `CONNECTION-001` | Partial | Connection, scope, cursor, deletion, job, and outbox storage exists; the SDK has deletion and permission-change events. | Credential services, revocation, sync cancellation, cascade workers, progress API/UI, 24-hour enforcement, and end-to-end tests. |
 | `ACCOUNT-001` | Partial | Workspace state and durable deletion-request/job/outbox/audit storage exist. | Immediate access-termination service, cascade workers, receipt/status, export, backup-retention handling, and deadline alerts/tests. |
 | `SAFETY-001` | Partial | Product and SDK are structurally read-only; strict API models reject unknown input; privacy-safe problems avoid echoing inputs and internal errors; database-backed auth/workspace dependencies fail closed; signed cursors and idempotency hashes bind principal/workspace context; identity and tenant tables use tested forced RLS. | Content sanitization boundaries, prompt-injection fixtures through retrieval/answering, log redaction, and full cross-user service tests. |
@@ -120,8 +120,8 @@ user-visible workflows.
 
 ### API platform
 
-- FastAPI publishes OpenAPI 3.1 and mounts a `/v1` router with six implemented
-  authentication operations; the other 43 product operations stay closed
+- FastAPI publishes OpenAPI 3.1 and mounts a `/v1` router with six authentication
+  operations plus hybrid search; the other 42 product operations stay closed
   until their services exist.
 - Every response receives a canonical UUID request ID; valid caller IDs are
   normalized and invalid IDs are replaced.
@@ -163,7 +163,7 @@ user-visible workflows.
   functions and forced RLS protect account, session, and membership reads.
 - Six catalogued endpoints implement register, email verification, login,
   refresh, logout, and `me`; the Next.js page provides their minimal UI.
-- `61 backend tests at 92.58% line coverage`, `13 PostgreSQL integration tests`,
+- `83 backend tests at 94.23% line coverage`, `17 PostgreSQL integration tests`,
   web checks, production builds, Docker health checks, and
   `scripts/smoke-auth.py` cover the slice.
 
@@ -196,6 +196,29 @@ explicitly supported normalized text/Markdown scope. Binary/provider-specific
 parsers and production semantic embeddings are expansions, not claims of this
 checkpoint.
 
+### Hybrid search backend
+
+- Deterministic Unicode query planning and typed filters feed four bounded
+  PostgreSQL lanes: exact/title, full-text, pgvector cosine, and title trigram.
+- Every lane selects only active sources whose current immutable version is
+  ready, while API-role forced RLS binds the authenticated user and workspace.
+- Weighted reciprocal-rank fusion, normalized feature reranking, hash
+  deduplication, stable tie-breaking, and a three-chunk-per-source cap shape
+  results without model nondeterminism.
+- Answer mode selects token-, source-, and section-bounded context and returns
+  extractive claims whose citation IDs point to server-hydrated excerpts and
+  allowlisted stored targets. Empty evidence is reported honestly.
+- `POST /v1/search` validates authentication, workspace, filters, limits, and
+  answer idempotency-key syntax; completed and insufficient searches are
+  retained for 30 days in `search_requests`.
+- Unit tests cover planning, fusion, caps, snippets, API contracts, citations,
+  and empty answers. Live pgvector/PostgreSQL tests cover fake connector → index
+  → hybrid search → history plus filter narrowing and cross-tenant denial.
+
+Search-engine master tasks complete: `9/9`, `P9-001` through `P9-009`, for the
+local-index backend scope. Production model synthesis, labeled quality gates,
+and user-facing search/chat screens remain later phases.
+
 ## Explicitly unimplemented inventory
 
 The following do not exist in production code yet:
@@ -207,9 +230,9 @@ The following do not exist in production code yet:
 - Any real provider client or provider data synchronization.
 - Binary PDF/Office/email parsers, OCR, production semantic embeddings, and
   provider-specific extraction policies.
-- Keyword, vector, hybrid, filtered, or reranked search.
-- Conversations, model calls, streamed answers, grounding, or citations.
-- The other 43 product `/v1` endpoints, web dashboard, search/chat UI,
+- Conversations, production model calls, streamed answers, or conflict-aware
+  synthesis.
+- The other 42 product `/v1` endpoints, web dashboard, search/chat UI,
   connection UI, or source browser.
 - Desktop folder selection, scanner, watcher, manifest sync, or offline queue.
 - Disconnect/account deletion workflows, billing, production deployment, or
@@ -228,11 +251,11 @@ define design ownership:
 | `B3` | Stage 08/09 security and auth design checkpoint | Complete the owning security/auth specifications before implementing credentials, sessions, authorization middleware, and OAuth. **Complete:** both documents now define implementation-ready controls and test matrices enforced by `validate-security-auth.sh`. |
 | `B4` | Authentication vertical slice | **Complete:** users, password/session security, register/verify/login/refresh/logout/me endpoints, workspace bootstrap, minimal UI, PostgreSQL tests, and a live Docker smoke test. |
 | `B5` | Stage 07 indexing design and implementation | **Complete:** deterministic text/Markdown extraction, chunking, deduplication, local embeddings, durable jobs, authoritative worker claims, atomic promotion, and fake-connector-to-index PostgreSQL tests. |
-| `B6` | Stage 03 search implementation | Tenant-safe FTS/vector retrieval, fusion, filters, ranking, context, citations, API, and evaluation tests. |
+| `B6` | Stage 03 search implementation | **Complete:** tenant-safe exact/FTS/vector/trigram retrieval, filters, fusion/ranking, bounded context, extractive citations, search API/history, and unit/PostgreSQL tests. |
 | `B7` | Real provider and desktop slices | Google, GitHub, then local desktop behavior, each certified by the Connector SDK suite and integrated end to end. |
 
 The active backfill item is always the first unfinished row. Backfills `B0`
-through `B5` are complete; `B6` is next. No later slice may be reported
+through `B6` are complete; `B7` is next. No later slice may be reported
 complete because a model, interface, fake, document, or application shell
 exists.
 

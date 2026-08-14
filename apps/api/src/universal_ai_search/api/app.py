@@ -19,6 +19,8 @@ from universal_ai_search.auth.security import AccessTokenCodec, PasswordSecurity
 from universal_ai_search.auth.service import AuthenticationService
 from universal_ai_search.auth.store import SQLAlchemyAuthStore
 from universal_ai_search.config import Settings, get_settings
+from universal_ai_search.search.repository import SearchRepository
+from universal_ai_search.search.service import SearchService
 
 
 @asynccontextmanager
@@ -64,6 +66,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.workspace_authorization_backend = DatabaseWorkspaceAuthorizationBackend(
         service
     )
+    app.state.search_service = SearchService(SearchRepository(engine))
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[runtime_settings.web_origin],
