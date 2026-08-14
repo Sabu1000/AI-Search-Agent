@@ -137,6 +137,26 @@ services:
       retries: 12
     restart: unless-stopped
 
+  worker:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/backend.Dockerfile
+    command: ["universal-ai-search-worker", "--poll-interval", "1"]
+    environment:
+      UAS_ENVIRONMENT: ${UAS_ENVIRONMENT:-local}
+      UAS_DATABASE_URL: ${UAS_DATABASE_URL:-postgresql+psycopg://uas:change-me-local@postgres:5432/uas}
+      UAS_DATABASE_ROLE: ${UAS_DATABASE_ROLE:-app_api}
+      UAS_CURSOR_SIGNING_KEY: ${UAS_CURSOR_SIGNING_KEY:-change-me-local-cursor-signing-key-32-bytes}
+      UAS_IDEMPOTENCY_HASH_KEY: ${UAS_IDEMPOTENCY_HASH_KEY:-change-me-local-idempotency-hash-key-32-bytes}
+      UAS_AUTH_SIGNING_KEY: ${UAS_AUTH_SIGNING_KEY:-change-me-local-auth-signing-key-32-bytes}
+      UAS_AUTH_HASH_KEY: ${UAS_AUTH_HASH_KEY:-change-me-local-auth-hash-key-32-bytes}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
   web:
     build:
       context: .

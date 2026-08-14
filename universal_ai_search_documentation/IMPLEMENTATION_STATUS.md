@@ -1,9 +1,9 @@
 # Implementation Status
 
-**Last audited:** 2026-08-12
+**Last audited:** 2026-08-13
 
-**Audited baseline:** `370ea50`; this ledger includes the current `B4`
-checkpoint.
+**Audited baseline:** `d2d6366`; this ledger includes the current `B5`
+checkpoint changes.
 
 **Purpose:** Separate validated design specifications from working product
 features and keep an evidence-based record of the next implementation step.
@@ -33,13 +33,13 @@ shells are never counted as finished user features.
 | `04_DATABASE_SCHEMA.md` | Complete | Database runtime implemented; phase partial | Alembic revisions `0001_initial_schema` and `0002_auth_runtime` create `33/33` specified tables, auth runtime fields/functions, constraints, indexes, roles, grants, and forced RLS. Compose migrates before API startup; readiness checks the revision; 13 PostgreSQL integration tests cover auth bootstrap, catalog, lifecycle, and tenant isolation. Seed data, non-auth repositories, backup automation, and the Phase 3 review remain. |
 | `05_API_SPECIFICATION.md` | Complete | API platform plus auth routes implemented; product API partial | FastAPI has the OpenAPI 3.1 `/v1` boundary, request IDs, strict serialization, RFC 9457 problems, signed cursors, idempotency primitives, and working authentication/workspace backends. `6/49` catalogued product endpoints exist; rate limiting, SSE, general repositories, and the other feature services remain. |
 | `06_CONNECTOR_FRAMEWORK.md` | Complete | SDK implemented; provider ecosystem partial | The typed SDK, four change variants, registry, retry policy, runtime stream validator, fake connector, Docker gate, and CI job are implemented. Real Gmail, Drive, GitHub, and local-file connectors, OAuth persistence, scheduling, logging, and metrics are not. |
+| `07_INDEXING_PIPELINE.md` | Complete | Normalized text/Markdown path implemented | Deterministic normalization, language selection, structural chunking, exact/near deduplication, local 1,536-dimensional embeddings, durable PostgreSQL leasing, atomic promotion, unchanged skips, and re-index supersession pass unit and PostgreSQL/pgvector tests. Provider-specific binary parsers and production embedding providers remain later integrations. |
 | `08_SECURITY_AND_PRIVACY.md` | Complete | Partial controls | The threat model, data classification, tenant/cryptographic boundaries, browser/input/model defenses, audit/redaction policy, deletion/backup rules, and security release gates are implementation-ready. Existing RLS, strict API boundaries, secret validation, and containerized tests implement only part of the required controls. |
 | `09_AUTH_AND_OAUTH.md` | Complete | Authentication subset implemented; provider/recovery work partial | Password registration, email proof, Argon2id, signed access tokens, rotating opaque refresh sessions, replay-family revocation, browser CSRF/origin checks, logout, account/membership lookup, workspace bootstrap, and minimal web UI work end to end. Password recovery, reauthentication, OAuth callbacks, provider credential encryption, abuse throttling, and the full security review remain. |
 
-The next numbered design and implementation document is
-`07_INDEXING_PIPELINE.md`. The authentication dependency is now satisfied, so
-the next slice can build a fake-connector-to-index path under real principal
-and workspace authority.
+The next numbered implementation document is `03_SEARCH_ENGINE_DESIGN.md`
+through backfill `B6`. Stage 07 now supplies the ready chunks and embeddings
+that tenant-safe hybrid retrieval will consume.
 
 ## MVP requirement audit
 
@@ -49,8 +49,8 @@ and workspace authority.
 | `DESKTOP-001` | Partial | Tauri React/Rust shell compiles and is container-checked. | Signed installers, folder selection, root authorization, scanner/watcher, device registration, offline queue, removal/deletion flow, and platform tests. |
 | `GOOGLE-001` | Not started | Canonical SDK provider contracts only. | OAuth scopes/callbacks, encrypted credentials, Gmail and Drive clients, selections, full/incremental sync, revocation, UI, and provider contract tests. |
 | `GITHUB-001` | Not started | Canonical SDK provider contract only. | GitHub App, installation/repository selection, API client, webhooks, reconciliation, access removal, UI, and provider contract tests. |
-| `SYNC-001` | Partial | SDK defines deterministic changes, retry classes, terminal cursors, health results, and contract tests. | Durable jobs/cursors, scheduler, worker integration, status APIs/UI, sanitized persisted errors, replay tests, and operational metrics. |
-| `SEARCH-001` | Partial | Immutable source/version/chunk storage plus generated FTS, trigram, filtered metadata, and HNSW vector indexes exist. | Authorized retrieval repositories, filters, fusion/ranking, API, UI states, evaluation data, and search-level isolation tests. |
+| `SYNC-001` | Partial | SDK defines deterministic changes and the indexing path has durable idempotent PostgreSQL jobs, worker leases/attempts, stale-lease recovery, bounded errors, and unchanged skips. | Durable provider cursors, provider scheduler/orchestration, status APIs/UI, complete replay tests, and operational metrics. |
+| `SEARCH-001` | Partial | Immutable ready source/version/chunk records, generated FTS, deterministic local vectors, filtered metadata, and HNSW storage now work through the fake connector. | Authorized retrieval repositories, production semantic embeddings, filters, fusion/ranking, API, UI states, evaluation data, and search-level isolation tests. |
 | `ANSWER-001` | Not started | Answer/grounding behavior is specified only. | Model gateway, context construction, streaming generation, claim support checks, insufficient-evidence behavior, UI, and evaluation. |
 | `CITATION-001` | Partial | Claim and citation tables enforce same-workspace message/source/version/chunk lineage. | Citation builder, authorization recheck, safe target opening, API/UI rendering, and correctness tests. |
 | `CONNECTION-001` | Partial | Connection, scope, cursor, deletion, job, and outbox storage exists; the SDK has deletion and permission-change events. | Credential services, revocation, sync cancellation, cascade workers, progress API/UI, 24-hour enforcement, and end-to-end tests. |
@@ -65,7 +65,7 @@ prerequisite code exists; it does not increase the end-to-end count.
 ### Foundation
 
 - `apps/web`: tested Next.js production shell.
-- `apps/api`: tested FastAPI liveness/readiness service and worker entry point.
+- `apps/api`: tested FastAPI liveness/readiness service and durable indexing worker.
 - `apps/desktop`: tested Tauri/React shell and Rust compile configuration.
 - `packages/shared-types` and `packages/ui`: tested starter packages.
 - `compose.yaml`: PostgreSQL/pgvector, Redis, MinIO, Mailpit, API, and web local
@@ -107,11 +107,11 @@ logging, metrics, and the Phase 4 review remain open.
   indexes, generated `TSVECTOR`, and an HNSW `VECTOR(1536)` index are present.
 - `app_api`, `app_worker`, and `app_audit_reader` are non-login,
   non-`BYPASSRLS` roles. Identity and tenant tables use forced, fail-closed RLS.
-- Compose runs migrations to completion before starting the API, and readiness
-  rejects any revision other than `0002_auth_runtime`.
+- Compose runs migrations to completion before starting the API and worker, and
+  readiness rejects any revision other than `0003_indexing_runtime`.
 - An ephemeral PostgreSQL 16/pgvector Docker suite runs Python quality gates
-  and `13` authentication, catalog, migration-lifecycle, foreign-key, and
-  tenant-isolation tests in CI.
+  and `15` authentication, indexing, catalog, migration-lifecycle,
+  foreign-key, and tenant-isolation tests in CI.
 
 Database master tasks complete: `12/15`: `P3-001` through `P3-012`. Seed data,
 backup implementation, and the Phase 3 review remain open. These tables are
@@ -171,6 +171,31 @@ Authentication master tasks complete: `12/18`: `P2-001` through `P2-007`,
 `P2-010`, and `P2-013` through `P2-016`. Password recovery, Google/GitHub login,
 the full security review, and the Phase 2 review remain open.
 
+### Indexing pipeline
+
+- Normalized text and Markdown are Unicode-normalized, language-classified,
+  structurally chunked with deterministic IDs, and exact/near duplicates are
+  removed within safe structural scope.
+- A deterministic local 1,536-dimensional embedding provider makes development
+  and CI repeatable without sending content to an external model service.
+- PostgreSQL stores idempotent jobs, leases, attempt history, bounded failure
+  codes, immutable pending/ready/superseded versions, chunks, pgvector rows,
+  usage, generation changes, and identifier-only outbox events.
+- The `app_worker` role remains `NOBYPASSRLS`; a narrowly granted
+  security-definer claim function chooses the authoritative job workspace
+  before subsequent transactions set tenant context.
+- Promotion is atomic, unchanged input is skipped, and changed content creates
+  a new ready version only after every chunk and vector is valid. The previous
+  version stays ready until that transaction commits.
+- `72 backend tests at 93.11% line coverage` and `15 PostgreSQL integration
+  tests` include the fake connector → queue → worker → ready index path,
+  authoritative claiming, unchanged ingestion, and safe re-indexing.
+
+Indexing master tasks complete: `10/10`, `P8-001` through `P8-010`, for the
+explicitly supported normalized text/Markdown scope. Binary/provider-specific
+parsers and production semantic embeddings are expansions, not claims of this
+checkpoint.
+
 ## Explicitly unimplemented inventory
 
 The following do not exist in production code yet:
@@ -180,7 +205,8 @@ The following do not exist in production code yet:
 - Password recovery, reauthentication, OAuth, encrypted provider credential
   storage, authentication abuse throttling, and account profile editing.
 - Any real provider client or provider data synchronization.
-- Extraction, parsing, chunking, embedding, deduplication, or indexing workers.
+- Binary PDF/Office/email parsers, OCR, production semantic embeddings, and
+  provider-specific extraction policies.
 - Keyword, vector, hybrid, filtered, or reranked search.
 - Conversations, model calls, streamed answers, grounding, or citations.
 - The other 43 product `/v1` endpoints, web dashboard, search/chat UI,
@@ -201,14 +227,14 @@ define design ownership:
 | `B2` | Stage 05 API platform primitives | Versioned router, RFC 9457 problem details, request IDs, serialization, cursor helpers, idempotency primitives, auth/workspace dependency interfaces, and contract tests. Product endpoints remain closed until their services exist. |
 | `B3` | Stage 08/09 security and auth design checkpoint | Complete the owning security/auth specifications before implementing credentials, sessions, authorization middleware, and OAuth. **Complete:** both documents now define implementation-ready controls and test matrices enforced by `validate-security-auth.sh`. |
 | `B4` | Authentication vertical slice | **Complete:** users, password/session security, register/verify/login/refresh/logout/me endpoints, workspace bootstrap, minimal UI, PostgreSQL tests, and a live Docker smoke test. |
-| `B5` | Stage 07 indexing design and implementation | Extraction/chunking/deduplication/embedding queue contracts and an end-to-end fake-connector-to-index path. |
+| `B5` | Stage 07 indexing design and implementation | **Complete:** deterministic text/Markdown extraction, chunking, deduplication, local embeddings, durable jobs, authoritative worker claims, atomic promotion, and fake-connector-to-index PostgreSQL tests. |
 | `B6` | Stage 03 search implementation | Tenant-safe FTS/vector retrieval, fusion, filters, ranking, context, citations, API, and evaluation tests. |
 | `B7` | Real provider and desktop slices | Google, GitHub, then local desktop behavior, each certified by the Connector SDK suite and integrated end to end. |
 
-The active backfill item is always the first unfinished row. Backfills `B0`,
-`B1`, `B2`, `B3`, and `B4` are complete; `B5` is next. No later slice may be
-reported complete because a model, interface, fake, document, or application
-shell exists.
+The active backfill item is always the first unfinished row. Backfills `B0`
+through `B5` are complete; `B6` is next. No later slice may be reported
+complete because a model, interface, fake, document, or application shell
+exists.
 
 ## Evidence commands
 

@@ -201,16 +201,16 @@ Rules:
 
 # Phase 8 — Indexing Pipeline
 
-- [ ] P8-001 Text extraction
-- [ ] P8-002 Metadata extraction
-- [ ] P8-003 Language detection
-- [ ] P8-004 Chunking
-- [ ] P8-005 Embedding generation
-- [ ] P8-006 Duplicate detection
-- [ ] P8-007 Queue processing
-- [ ] P8-008 Incremental indexing
-- [ ] P8-009 Re-indexing
-- [ ] P8-010 Phase review
+- [x] P8-001 Text extraction
+- [x] P8-002 Metadata extraction
+- [x] P8-003 Language detection
+- [x] P8-004 Chunking
+- [x] P8-005 Embedding generation
+- [x] P8-006 Duplicate detection
+- [x] P8-007 Queue processing
+- [x] P8-008 Incremental indexing
+- [x] P8-009 Re-indexing
+- [x] P8-010 Phase review
 
 **Milestone:** All supported content becomes searchable.
 

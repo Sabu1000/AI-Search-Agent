@@ -63,4 +63,7 @@ testpaths = ["tests"]
 [tool.coverage.run]
 # SQL persistence is exercised against PostgreSQL by tests_database; the unit
 # coverage gate measures the application/security logic around that adapter.
-omit = ["*/universal_ai_search/auth/store.py"]
+omit = [
+  "*/universal_ai_search/auth/store.py",
+  "*/universal_ai_search/indexing/repository.py",
+]
