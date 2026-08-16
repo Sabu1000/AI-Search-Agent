@@ -158,6 +158,9 @@ services:
       UAS_AUTH_HASH_KEY: ${UAS_AUTH_HASH_KEY:-change-me-local-auth-hash-key-32-bytes}
       UAS_OAUTH_HASH_KEY: ${UAS_OAUTH_HASH_KEY:-change-me-local-oauth-hash-key-32-bytes}
       UAS_PROVIDER_ENCRYPTION_KEY: ${UAS_PROVIDER_ENCRYPTION_KEY:-change-me-local-provider-encryption-key-32-bytes}
+      UAS_GOOGLE_OAUTH_ENABLED: ${UAS_GOOGLE_OAUTH_ENABLED:-false}
+      UAS_GOOGLE_CLIENT_ID: ${UAS_GOOGLE_CLIENT_ID:-}
+      UAS_GOOGLE_CLIENT_SECRET: ${UAS_GOOGLE_CLIENT_SECRET:-}
     depends_on:
       migrate:
         condition: service_completed_successfully

@@ -8,7 +8,7 @@ from pathlib import Path
 from alembic import command
 from alembic.config import Config
 
-EXPECTED_SCHEMA_REVISION = "0003_indexing_runtime"
+EXPECTED_SCHEMA_REVISION = "0004_gmail_sync_runtime"
 
 
 def build_alembic_config() -> Config:

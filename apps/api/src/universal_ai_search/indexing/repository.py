@@ -104,7 +104,11 @@ class IndexRepository:
             provider = document.provider.value
             if account is None or account["status"] != "active":
                 raise ValueError("connection is not active")
-            if account["provider"] != provider:
+            provider_matches = account["provider"] == provider or (
+                account["provider"] == "google"
+                and provider in {"gmail", "google_drive"}
+            )
+            if not provider_matches:
                 raise ValueError("connector provider does not match connection")
 
             profile = connection.execute(
@@ -138,7 +142,13 @@ class IndexRepository:
 
             timestamp = document.modified_at or document.created_at
             timestamp_kind = (
-                "modified" if document.modified_at else "created" if timestamp else None
+                "modified"
+                if document.modified_at
+                else (
+                    "sent"
+                    if timestamp and document.source_type == "email"
+                    else "created" if timestamp else None
+                )
             )
             extension = PurePosixPath(document.external_id).suffix.lstrip(".") or None
             authors = ", ".join(document.authors)[:500] or None

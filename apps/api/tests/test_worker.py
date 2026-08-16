@@ -19,11 +19,19 @@ def test_worker_configuration_check(capsys: pytest.CaptureFixture[str]) -> None:
 
 
 def test_worker_consumes_one_job() -> None:
-    with patch(
-        "universal_ai_search.worker.main.IndexingRuntime.run_once", return_value=False
-    ) as run_once:
+    with (
+        patch(
+            "universal_ai_search.worker.main.GmailSyncRuntime.run_once",
+            return_value=False,
+        ) as sync_once,
+        patch(
+            "universal_ai_search.worker.main.IndexingRuntime.run_once",
+            return_value=False,
+        ) as run_once,
+    ):
         assert main(["--once"]) == 0
 
+    sync_once.assert_called_once()
     run_once.assert_called_once()
 
 

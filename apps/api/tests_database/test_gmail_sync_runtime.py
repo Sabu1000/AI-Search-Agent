@@ -1,0 +1,214 @@
+from __future__ import annotations
+
+import json
+from datetime import UTC, datetime, timedelta
+from uuid import UUID
+
+import psycopg
+from conftest import database_dsn
+from uas_connector_sdk import NormalizedDocument, Provider
+
+from universal_ai_search.connections.crypto import (
+    LocalEnvelopeEncryption,
+    envelope_context,
+)
+from universal_ai_search.connections.gmail import GmailPage
+from universal_ai_search.connections.google import GMAIL_READONLY_SCOPE
+from universal_ai_search.indexing.pipeline import IndexingPipeline
+from universal_ai_search.indexing.repository import IndexRepository
+from universal_ai_search.indexing.runtime import IndexingRuntime
+from universal_ai_search.sync.repository import GoogleSyncRepository
+from universal_ai_search.sync.runtime import GmailSyncRuntime
+
+WORKSPACE_ID = UUID("81000000-0000-4000-8000-000000000001")
+USER_ID = UUID("82000000-0000-4000-8000-000000000001")
+CONNECTION_ID = UUID("83000000-0000-4000-8000-000000000001")
+JOB_ID = UUID("84000000-0000-4000-8000-000000000001")
+
+
+class FakeGmailClient:
+    async def ensure_fresh(self, credentials: object) -> object:
+        return credentials
+
+    async def history_id(self, access_token: str) -> str:
+        assert access_token == "synthetic-access"
+        return "history-100"
+
+    async def page(self, **values: object) -> GmailPage:
+        assert values["access_token"] == "synthetic-access"
+        page_token = values["page_token"]
+        assert page_token in {None, "page-2"}
+        suffix = "1" if page_token is None else "2"
+        return GmailPage(
+            (
+                NormalizedDocument(
+                    external_id=f"gmail-message-{suffix}",
+                    provider=Provider.GMAIL,
+                    source_type="email",
+                    title=f"Gmail integration test {suffix}",
+                    content=(
+                        f"Subject: Gmail integration test {suffix}\n\n"
+                        f"Searchable mailbox content {suffix}."
+                    ),
+                    canonical_url=(
+                        "https://mail.google.com/mail/u/0/#all/"
+                        f"gmail-message-{suffix}"
+                    ),
+                    mime_type="text/plain",
+                    authors=("sender@example.test",),
+                    created_at=datetime(2026, 8, 15, tzinfo=UTC),
+                    provider_metadata={"thread_id": "thread-1"},
+                ),
+            ),
+            "page-2" if page_token is None else None,
+        )
+
+
+def test_gmail_full_sync_queues_indexes_and_commits_cursor(
+    connection: psycopg.Connection[tuple[object, ...]],
+) -> None:
+    encryption = LocalEnvelopeEncryption(b"e" * 32)
+    credential_context = envelope_context(
+        provider="google",
+        workspace_id=str(WORKSPACE_ID),
+        record_id=str(CONNECTION_ID),
+        purpose="provider-credential",
+    )
+    credential_payload = json.dumps(
+        {
+            "access_token": "synthetic-access",
+            "expires_at": (datetime.now(UTC) + timedelta(hours=1)).isoformat(),
+            "refresh_token": "synthetic-refresh",
+            "schema_version": 1,
+            "scopes": [GMAIL_READONLY_SCOPE],
+        }
+    ).encode()
+    envelope = encryption.encrypt(credential_payload, context=credential_context)
+
+    connection.execute("DELETE FROM app.workspaces")
+    connection.execute("DELETE FROM app.users")
+    connection.execute(
+        "INSERT INTO app.users (id, email, full_name, status) "
+        "VALUES (%s, 'gmail-sync@example.test', 'Gmail Sync', 'active')",
+        (USER_ID,),
+    )
+    connection.execute(
+        "INSERT INTO app.workspaces (id, name, plan, status) "
+        "VALUES (%s, 'Gmail Sync', 'free', 'active')",
+        (WORKSPACE_ID,),
+    )
+    connection.execute(
+        "INSERT INTO app.workspace_members (workspace_id, user_id, role, status) "
+        "VALUES (%s, %s, 'owner', 'active')",
+        (WORKSPACE_ID, USER_ID),
+    )
+    connection.execute(
+        """INSERT INTO app.connections (
+            id, workspace_id, owner_user_id, provider, display_label, status,
+            credential_ciphertext, encrypted_data_key, key_version
+        ) VALUES (%s, %s, %s, 'google', 'gmail-sync@example.test', 'active',
+            %s, %s, %s)""",
+        (
+            CONNECTION_ID,
+            WORKSPACE_ID,
+            USER_ID,
+            envelope.ciphertext,
+            envelope.encrypted_data_key,
+            envelope.key_version,
+        ),
+    )
+    connection.execute(
+        "INSERT INTO app.connection_scopes (workspace_id, connection_id, scope) "
+        "VALUES (%s, %s, %s)",
+        (WORKSPACE_ID, CONNECTION_ID, GMAIL_READONLY_SCOPE),
+    )
+    connection.execute(
+        "INSERT INTO app.workspace_usage (workspace_id) VALUES (%s)",
+        (WORKSPACE_ID,),
+    )
+    connection.execute(
+        """INSERT INTO app.jobs (
+            id, workspace_id, connection_id, job_type, queue,
+            idempotency_key, status, payload
+        ) VALUES (%s, %s, %s, 'sync', 'sync', 'gmail-e2e', 'pending',
+            '{"mode":"full","source_families":["gmail"]}'::JSONB)""",
+        (JOB_ID, WORKSPACE_ID, CONNECTION_ID),
+    )
+    connection.commit()
+
+    index_repository = IndexRepository(database_dsn())
+    sync_runtime = GmailSyncRuntime(
+        repository=GoogleSyncRepository(database_dsn()),
+        index_repository=index_repository,
+        client=FakeGmailClient(),  # type: ignore[arg-type]
+        encryption=encryption,
+    )
+    assert sync_runtime.run_once("gmail-database-test")
+
+    assert connection.execute(
+        "SELECT status, attempt_count FROM app.jobs WHERE id = %s", (JOB_ID,)
+    ).fetchone() == ("completed", 1)
+    assert connection.execute(
+        "SELECT count(*) FROM app.connection_cursors WHERE connection_id = %s",
+        (CONNECTION_ID,),
+    ).fetchone() == (0,)
+    assert connection.execute(
+        "SELECT count(*) FROM app.jobs WHERE connection_id = %s "
+        "AND job_type = 'sync' AND status = 'pending'",
+        (CONNECTION_ID,),
+    ).fetchone() == (1,)
+    continuation_payload = connection.execute(
+        "SELECT payload::TEXT FROM app.jobs WHERE connection_id = %s "
+        "AND job_type = 'sync' AND status = 'pending'",
+        (CONNECTION_ID,),
+    ).fetchone()
+    assert continuation_payload is not None
+    payload_text = continuation_payload[0]
+    assert isinstance(payload_text, str)
+    assert "gmail_progress" in payload_text
+    assert "page-2" not in payload_text
+    assert "history-100" not in payload_text
+
+    assert sync_runtime.run_once("gmail-database-test")
+    assert connection.execute(
+        "SELECT cursor ->> 'history_id' FROM app.connection_cursors "
+        "WHERE connection_id = %s AND stream = 'gmail'",
+        (CONNECTION_ID,),
+    ).fetchone() == ("history-100",)
+    index_job_ids = connection.execute(
+        "SELECT id FROM app.jobs WHERE connection_id = %s AND job_type = 'index'",
+        (CONNECTION_ID,),
+    ).fetchall()
+    assert len(index_job_ids) == 2
+
+    assert IndexingRuntime(index_repository, IndexingPipeline()).run_once(
+        "gmail-index-test"
+    )
+    assert IndexingRuntime(index_repository, IndexingPipeline()).run_once(
+        "gmail-index-test"
+    )
+    assert (
+        connection.execute(
+            """SELECT source.provider, source.source_type, version.state,
+            version.normalized_text
+        FROM app.sources AS source
+        JOIN app.document_versions AS version
+          ON version.id = source.current_document_version_id
+        WHERE source.connection_id = %s ORDER BY source.external_id""",
+            (CONNECTION_ID,),
+        ).fetchall()
+        == [
+            (
+                "gmail",
+                "email",
+                "ready",
+                "Subject: Gmail integration test 1\n\nSearchable mailbox content 1.",
+            ),
+            (
+                "gmail",
+                "email",
+                "ready",
+                "Subject: Gmail integration test 2\n\nSearchable mailbox content 2.",
+            ),
+        ]
+    )

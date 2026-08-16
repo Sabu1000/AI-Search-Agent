@@ -20,15 +20,16 @@ separately so a validated design is never presented as working product code.
   search is complete for the local-index backend (`9/9`), and end-to-end MVP
   acceptance is `1/11`
 - Backfill status: `B0` through `B6` are complete; `B7` is active, with Google
-  authorization and the durable initial-sync handoff implemented
-- Next implementation slice: the Gmail content client and sync-job consumer
+  authorization and bounded Gmail initial synchronization implemented
+- Next implementation slice: incremental Gmail synchronization from the
+  committed Gmail history cursor
 - Product status: tested project foundation, an implemented 33-table
   PostgreSQL schema with forced tenant RLS, an implemented Python connector
   SDK, a tested fail-closed API platform layer, and a working six-endpoint
   email/password authentication flow with a minimal web UI, durable indexing,
-  tenant-safe hybrid search, and Google OAuth connection authorization; Google
-  content synchronization, provider UIs, and the remaining 40 product
-  endpoints remain to be built
+  tenant-safe hybrid search, Google OAuth connection authorization, and Gmail
+  full sync into the searchable index; Drive synchronization, provider UIs,
+  and the remaining 40 product endpoints remain to be built
 - Safety boundary: version 1 is read-only; retrieved content is untrusted data
   and cannot trigger actions
 
@@ -136,9 +137,12 @@ UAS_GOOGLE_REDIRECT_URI=http://localhost:8000/v1/connections/google/callback
 The API requests only pinned Gmail/Drive read-only scopes and refuses missing
 or unexpected grants. Google classifies these broad read-only scopes as
 restricted, so public deployment requires its OAuth verification and security
-review. This checkpoint authorizes and stores the connection, then creates a
-durable full-sync job; the Gmail/Drive content worker that consumes that job is
-the next implementation slice.
+review. A Gmail connection now creates a durable full-sync job. The worker
+refreshes encrypted credentials when needed, imports the mailbox in bounded
+25-message pages, queues each normalized message for indexing, and commits the
+Gmail history cursor only after the final page. Drive jobs remain pending until
+the Drive connector is implemented. There is not yet a connection UI, and the
+live Google sandbox smoke test still requires your own Google test project.
 
 ## Docker foundation
 

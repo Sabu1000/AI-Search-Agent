@@ -1,8 +1,9 @@
 # Connector Framework
 
 > **Implementation status:** The shared Connector SDK scope is implemented and
-> tested. The wider connector phase is partial (`5/11` master tasks), and no
-> real Gmail, Drive, GitHub, or local-file provider connector exists yet. See
+> tested. The wider connector phase is partial (`7/11` master tasks). A real
+> read-only Gmail initial-sync client exists; incremental Gmail, Drive, GitHub,
+> and local-file provider clients remain. See
 > [`IMPLEMENTATION_STATUS.md`](IMPLEMENTATION_STATUS.md).
 
 ## Goals and ownership
@@ -41,6 +42,29 @@ The production API/worker image installs this package. A dedicated Docker test
 image runs Black, Ruff, strict mypy, pytest, and a minimum 90% coverage gate.
 CI runs that image independently so connector contract failures cannot be
 hidden by web or API success.
+
+## Implemented Gmail initial-sync adapter
+
+The backend Gmail adapter uses only profile, message-list, and full-message GET
+operations plus the OAuth token refresh endpoint. It maps authentication,
+permission, rate-limit, outage, and malformed-response failures into the SDK's
+sanitized taxonomy. Plain text is preferred over HTML alternatives; HTML is
+reduced to inert text and attachment bodies are not fetched in this slice.
+
+The worker claims a Gmail job through an authoritative database function,
+decrypts credentials only in memory, refreshes and re-encrypts them when they
+are near expiry, and imports at most 25 message references per job. Each page
+durably queues idempotent index jobs before a separately identified continuation
+job is created. The continuation page token and history ID are envelope-encrypted
+in that job, and only a one-way token fingerprint is used for idempotency. The
+initial profile history ID becomes the `gmail` connection cursor only when the
+last page succeeds. A crash can therefore replay a page without advancing past
+content or duplicating a searchable source.
+
+This implements `P5-002` and the full-mailbox ingestion portion of `P5-003`.
+History-based incremental changes, authoritative deletion reconciliation,
+attachments, advanced email parsing, label selection UI, and a live Google
+sandbox certification remain separate tasks.
 
 ## Canonical providers and source identity
 

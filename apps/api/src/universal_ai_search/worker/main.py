@@ -6,9 +6,13 @@ from collections.abc import Sequence
 
 from universal_ai_search import __version__
 from universal_ai_search.config import get_settings
+from universal_ai_search.connections.crypto import LocalEnvelopeEncryption
+from universal_ai_search.connections.gmail import HttpGmailClient
 from universal_ai_search.indexing.pipeline import IndexingPipeline
 from universal_ai_search.indexing.repository import IndexRepository
 from universal_ai_search.indexing.runtime import IndexingRuntime
+from universal_ai_search.sync.repository import GoogleSyncRepository
+from universal_ai_search.sync.runtime import GmailSyncRuntime
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -48,15 +52,29 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     if arguments.poll_interval <= 0:
         raise SystemExit("--poll-interval must be greater than zero")
-    runtime = IndexingRuntime(
-        IndexRepository(settings.database_url), IndexingPipeline()
+    index_repository = IndexRepository(settings.database_url)
+    runtime = IndexingRuntime(index_repository, IndexingPipeline())
+    sync_runtime = GmailSyncRuntime(
+        repository=GoogleSyncRepository(settings.database_url),
+        index_repository=index_repository,
+        client=HttpGmailClient(
+            client_id=settings.google_client_id,
+            client_secret=settings.google_client_secret.get_secret_value(),
+        ),
+        encryption=LocalEnvelopeEncryption(
+            settings.provider_encryption_key.get_secret_value().encode()
+        ),
+        enabled=settings.google_oauth_enabled,
     )
     worker_id = f"{socket.gethostname()}:{__version__}"
     if arguments.once:
-        runtime.run_once(worker_id)
+        if not sync_runtime.run_once(worker_id):
+            runtime.run_once(worker_id)
         return 0
     while True:
-        consumed = runtime.run_once(worker_id)
+        synced = sync_runtime.run_once(worker_id)
+        indexed = runtime.run_once(worker_id)
+        consumed = synced or indexed
         if not consumed:
             time.sleep(arguments.poll_interval)
 

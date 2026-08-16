@@ -5,7 +5,7 @@
 **Version:** 1.0
 
 **Status:** In progress — specifications 00 through 06 and 08/09 are validated;
-foundation is `27/30`, authentication is `12/18`, Connector SDK is `5/11`, and
+foundation is `27/30`, authentication is `12/18`, Connector SDK is `7/11`, and
 end-to-end MVP acceptance is `1/11`. See
 [`IMPLEMENTATION_STATUS.md`](IMPLEMENTATION_STATUS.md) for
 evidence, missing features, and active backfill order.
@@ -151,8 +151,8 @@ Rules:
 # Phase 5 — Gmail Connector
 
 - [x] P5-001 Google OAuth scopes
-- [ ] P5-002 Gmail API client
-- [ ] P5-003 Initial sync
+- [x] P5-002 Gmail API client
+- [x] P5-003 Initial sync
 - [ ] P5-004 Incremental sync
 - [ ] P5-005 Email parser
 - [ ] P5-006 Attachment extraction

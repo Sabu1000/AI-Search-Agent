@@ -373,6 +373,11 @@ This specification is complete when application identity and every secret
 lifecycle have explicit issuance, storage, validation, rotation, revocation,
 redaction, failure, and test rules; workspace authority and provider callbacks
 cannot be caller-selected; and the first authentication vertical slice is
-bounded. Specification completion does not implement authentication or OAuth.
-The next checkpoint is `B4`, which implements the application-authentication
-subset and keeps provider connection routes closed.
+bounded. The implemented subset now includes application authentication,
+Google connection authorization, encrypted Google credentials, safe access-token
+refresh during Gmail jobs, and durable Gmail initial synchronization. Password
+recovery, Google login, GitHub authorization, provider revocation, production
+KMS rotation, and the full security review remain later work.
+
+Backfill `B4` delivered the first authentication vertical slice; the current
+provider work extends that boundary without changing this document's ownership.

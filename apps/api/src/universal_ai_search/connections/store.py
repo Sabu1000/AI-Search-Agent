@@ -291,46 +291,49 @@ class SQLAlchemyGoogleConnectionStore:
         connection_id: UUID,
         source_families: tuple[str, ...],
     ) -> None:
-        job_id = uuid5(connection_id, "google-initial-sync")
-        payload = json.dumps({"source_families": list(source_families), "mode": "full"})
-        await connection.execute(
-            text("DELETE FROM app.job_attempts WHERE job_id = :job_id"),
-            {"job_id": job_id},
-        )
-        await connection.execute(
-            text(
-                """INSERT INTO app.jobs (
-                id, workspace_id, connection_id, job_type, queue,
-                idempotency_key, status, payload
-                ) VALUES (
-                :job_id, :workspace_id, :connection_id, 'sync', 'sync',
-                :idempotency_key, 'pending', CAST(:payload AS JSONB))
-                ON CONFLICT (workspace_id, job_type, idempotency_key)
-                DO UPDATE SET status = 'pending', available_at = clock_timestamp(),
-                  payload = EXCLUDED.payload, updated_at = clock_timestamp(),
-                  attempt_count = 0, lease_owner = NULL, lease_expires_at = NULL,
-                  completed_at = NULL, error_code = NULL"""
-            ),
-            {
-                "job_id": job_id,
-                "workspace_id": workspace_id,
-                "connection_id": connection_id,
-                "idempotency_key": f"google-initial:{connection_id}",
-                "payload": payload,
-            },
-        )
-        await connection.execute(
-            text(
-                """INSERT INTO app.outbox_events (
-                id, workspace_id, aggregate_type, aggregate_id, event_type, payload
-                ) VALUES (
-                :event_id, :workspace_id, 'connection', :connection_id,
-                'connection.sync.requested', CAST(:payload AS JSONB))"""
-            ),
-            {
-                "event_id": uuid4(),
-                "workspace_id": workspace_id,
-                "connection_id": connection_id,
-                "payload": json.dumps({"job_id": str(job_id)}),
-            },
-        )
+        for family in source_families:
+            job_id = uuid5(connection_id, f"google-initial-sync:{family}")
+            payload = json.dumps({"source_families": [family], "mode": "full"})
+            await connection.execute(
+                text("DELETE FROM app.job_attempts WHERE job_id = :job_id"),
+                {"job_id": job_id},
+            )
+            await connection.execute(
+                text(
+                    """INSERT INTO app.jobs (
+                    id, workspace_id, connection_id, job_type, queue,
+                    idempotency_key, status, payload
+                    ) VALUES (
+                    :job_id, :workspace_id, :connection_id, 'sync', 'sync',
+                    :idempotency_key, 'pending', CAST(:payload AS JSONB))
+                    ON CONFLICT (workspace_id, job_type, idempotency_key)
+                    DO UPDATE SET status = 'pending', available_at = clock_timestamp(),
+                      payload = EXCLUDED.payload, updated_at = clock_timestamp(),
+                      attempt_count = 0, lease_owner = NULL, lease_expires_at = NULL,
+                      completed_at = NULL, error_code = NULL"""
+                ),
+                {
+                    "job_id": job_id,
+                    "workspace_id": workspace_id,
+                    "connection_id": connection_id,
+                    "idempotency_key": f"google-initial:{connection_id}:{family}",
+                    "payload": payload,
+                },
+            )
+            await connection.execute(
+                text(
+                    """INSERT INTO app.outbox_events (
+                    id, workspace_id, aggregate_type, aggregate_id, event_type, payload
+                    ) VALUES (
+                    :event_id, :workspace_id, 'connection', :connection_id,
+                    'connection.sync.requested', CAST(:payload AS JSONB))"""
+                ),
+                {
+                    "event_id": uuid4(),
+                    "workspace_id": workspace_id,
+                    "connection_id": connection_id,
+                    "payload": json.dumps(
+                        {"job_id": str(job_id), "source_family": family}
+                    ),
+                },
+            )

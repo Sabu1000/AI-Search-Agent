@@ -69,4 +69,5 @@ omit = [
   "*/universal_ai_search/connections/store.py",
   "*/universal_ai_search/indexing/repository.py",
   "*/universal_ai_search/search/repository.py",
+  "*/universal_ai_search/sync/repository.py",
 ]
