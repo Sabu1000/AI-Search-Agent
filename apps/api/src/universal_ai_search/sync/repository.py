@@ -28,6 +28,7 @@ class GoogleSyncInput:
     credentials: EncryptedEnvelope
     payload: dict[str, object]
     scopes: frozenset[str]
+    history_id: str | None
 
 
 class GoogleSyncRepository:
@@ -64,6 +65,10 @@ class GoogleSyncRepository:
                 """SELECT connection.credential_ciphertext AS ciphertext,
                     connection.encrypted_data_key, connection.key_version,
                     job.payload,
+                    (SELECT cursor.cursor ->> 'history_id'
+                       FROM app.connection_cursors AS cursor
+                      WHERE cursor.connection_id = connection.id
+                        AND cursor.stream = 'gmail') AS history_id,
                     ARRAY(SELECT scope.scope FROM app.connection_scopes AS scope
                           WHERE scope.connection_id = connection.id
                           ORDER BY scope.scope) AS scopes
@@ -93,6 +98,9 @@ class GoogleSyncRepository:
                 ),
                 payload=payload,
                 scopes=frozenset(str(scope) for scope in row["scopes"]),
+                history_id=(
+                    str(row["history_id"]) if row["history_id"] is not None else None
+                ),
             )
 
     def save_credentials(
@@ -120,6 +128,7 @@ class GoogleSyncRepository:
         self,
         claim: ClaimedSyncJob,
         *,
+        mode: str,
         next_job_id: UUID,
         token_fingerprint: str,
         encrypted_progress: EncryptedEnvelope,
@@ -135,7 +144,7 @@ class GoogleSyncRepository:
                     ).decode(),
                     "key_version": encrypted_progress.key_version,
                 },
-                "mode": "full",
+                "mode": mode,
                 "source_families": ["gmail"],
             },
             sort_keys=True,
@@ -154,13 +163,13 @@ class GoogleSyncRepository:
                     next_job_id,
                     claim.workspace_id,
                     claim.connection_id,
-                    f"gmail-full-page:{claim.connection_id}:{token_fingerprint}",
+                    f"gmail-{mode}-page:{claim.connection_id}:{token_fingerprint}",
                     payload,
                 ),
             )
             self._finish_current(connection, claim)
 
-    def complete(self, claim: ClaimedSyncJob, *, history_id: str) -> None:
+    def complete(self, claim: ClaimedSyncJob, *, history_id: str, mode: str) -> None:
         cursor = json.dumps({"history_id": history_id})
         with psycopg.connect(self._database_url, row_factory=dict_row) as connection:
             self._context(connection, claim.workspace_id)
@@ -192,16 +201,57 @@ class GoogleSyncRepository:
                 """INSERT INTO app.outbox_events (
                     id, workspace_id, aggregate_type, aggregate_id, event_type, payload
                 ) VALUES (%s, %s, 'connection', %s,
-                    'connection.gmail.full_sync_completed', %s::JSONB)
+                    %s, %s::JSONB)
                 ON CONFLICT (id) DO NOTHING""",
                 (
                     uuid5(claim.job_id, "gmail-sync-completed"),
                     claim.workspace_id,
                     claim.connection_id,
+                    f"connection.gmail.{mode}_sync_completed",
                     json.dumps({"job_id": str(claim.job_id)}),
                 ),
             )
+            self._schedule_incremental(connection, claim)
             self._finish_current(connection, claim)
+
+    def recover_full(self, claim: ClaimedSyncJob) -> None:
+        recovery_job_id = uuid5(claim.job_id, "gmail-full-recovery")
+        with psycopg.connect(self._database_url, row_factory=dict_row) as connection:
+            self._context(connection, claim.workspace_id)
+            self._lock_claim(connection, claim)
+            connection.execute(
+                """INSERT INTO app.jobs (
+                    id, workspace_id, connection_id, job_type, queue,
+                    idempotency_key, status, payload
+                ) VALUES (%s, %s, %s, 'sync', 'sync', %s, 'pending',
+                    '{"mode":"full","source_families":["gmail"]}'::JSONB)
+                ON CONFLICT (workspace_id, job_type, idempotency_key) DO NOTHING""",
+                (
+                    recovery_job_id,
+                    claim.workspace_id,
+                    claim.connection_id,
+                    f"gmail-full-recovery:{claim.job_id}",
+                ),
+            )
+            connection.execute(
+                """UPDATE app.job_attempts SET status = 'permanent_failure',
+                    error_code = 'CURSOR_INVALID', finished_at = clock_timestamp()
+                WHERE job_id = %s AND attempt_number = %s AND status = 'running'""",
+                (claim.job_id, claim.attempt_number),
+            )
+            connection.execute(
+                """UPDATE app.jobs SET status = 'failed', error_code = 'CURSOR_INVALID',
+                    lease_owner = NULL, lease_expires_at = NULL,
+                    completed_at = clock_timestamp(), updated_at = clock_timestamp()
+                WHERE id = %s""",
+                (claim.job_id,),
+            )
+            connection.execute(
+                """UPDATE app.connections SET last_error_code = 'CURSOR_INVALID',
+                    updated_at = clock_timestamp(), lock_version = lock_version + 1
+                WHERE id = %s""",
+                (claim.connection_id,),
+            )
 
     def fail(
         self,
@@ -278,4 +328,25 @@ class GoogleSyncRepository:
                 lease_expires_at = NULL, completed_at = clock_timestamp(),
                 updated_at = clock_timestamp() WHERE id = %s""",
             (claim.job_id,),
+        )
+
+    @staticmethod
+    def _schedule_incremental(
+        connection: psycopg.Connection[dict[str, object]], claim: ClaimedSyncJob
+    ) -> None:
+        next_job_id = uuid5(claim.job_id, "gmail-incremental-next")
+        connection.execute(
+            """INSERT INTO app.jobs (
+                id, workspace_id, connection_id, job_type, queue,
+                idempotency_key, status, available_at, payload
+            ) VALUES (%s, %s, %s, 'sync', 'sync', %s, 'pending',
+                clock_timestamp() + INTERVAL '1 minute',
+                '{"mode":"incremental","source_families":["gmail"]}'::JSONB)
+            ON CONFLICT (workspace_id, job_type, idempotency_key) DO NOTHING""",
+            (
+                next_job_id,
+                claim.workspace_id,
+                claim.connection_id,
+                f"gmail-incremental:{claim.job_id}",
+            ),
         )

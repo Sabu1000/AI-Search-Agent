@@ -375,7 +375,7 @@ redaction, failure, and test rules; workspace authority and provider callbacks
 cannot be caller-selected; and the first authentication vertical slice is
 bounded. The implemented subset now includes application authentication,
 Google connection authorization, encrypted Google credentials, safe access-token
-refresh during Gmail jobs, and durable Gmail initial synchronization. Password
+refresh during Gmail jobs, and durable Gmail full/incremental synchronization. Password
 recovery, Google login, GitHub authorization, provider revocation, production
 KMS rotation, and the full security review remain later work.
 

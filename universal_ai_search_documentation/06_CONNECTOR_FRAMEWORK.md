@@ -2,8 +2,8 @@
 
 > **Implementation status:** The shared Connector SDK scope is implemented and
 > tested. The wider connector phase is partial (`7/11` master tasks). A real
-> read-only Gmail initial-sync client exists; incremental Gmail, Drive, GitHub,
-> and local-file provider clients remain. See
+> read-only Gmail full and incremental-sync client exists; Drive, GitHub, and
+> local-file provider clients remain. See
 > [`IMPLEMENTATION_STATUS.md`](IMPLEMENTATION_STATUS.md).
 
 ## Goals and ownership
@@ -43,7 +43,7 @@ image runs Black, Ruff, strict mypy, pytest, and a minimum 90% coverage gate.
 CI runs that image independently so connector contract failures cannot be
 hidden by web or API success.
 
-## Implemented Gmail initial-sync adapter
+## Implemented Gmail synchronization adapter
 
 The backend Gmail adapter uses only profile, message-list, and full-message GET
 operations plus the OAuth token refresh endpoint. It maps authentication,
@@ -61,10 +61,20 @@ initial profile history ID becomes the `gmail` connection cursor only when the
 last page succeeds. A crash can therefore replay a page without advancing past
 content or duplicating a searchable source.
 
-This implements `P5-002` and the full-mailbox ingestion portion of `P5-003`.
-History-based incremental changes, authoritative deletion reconciliation,
-attachments, advanced email parsing, label selection UI, and a live Google
-sandbox certification remain separate tasks.
+After the last full-sync page, the worker schedules a one-minute incremental
+poll from the committed cursor. Each incremental job requests at most 100 Gmail
+history records, deduplicates message changes, refetches current content for
+adds and label changes, and tombstones messages reported deleted. Tombstones
+immediately disappear from search, cancel unclaimed index jobs, update usage,
+and emit an outbox event. History pagination uses the same encrypted
+continuation boundary as full sync, and the new cursor is committed only on the
+last page. Gmail's expired-cursor `404` fails that incremental job with the
+sanitized `CURSOR_INVALID` code and schedules a controlled full recovery.
+
+This implements `P5-002` through `P5-004` and the immediate search-cutoff part
+of `P5-009`. Attachment/content purge, advanced email parsing, label selection
+UI, full-list absence reconciliation, and a live Google sandbox certification
+remain separate tasks.
 
 ## Canonical providers and source identity
 

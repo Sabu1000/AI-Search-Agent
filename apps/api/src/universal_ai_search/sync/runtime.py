@@ -12,7 +12,11 @@ from uuid import UUID, uuid5
 from cryptography.exceptions import InvalidTag
 from pydantic import SecretStr, ValidationError
 from uas_connector_sdk import Credentials
-from uas_connector_sdk.errors import AuthenticationError, ConnectorError
+from uas_connector_sdk.errors import (
+    AuthenticationError,
+    ConnectorError,
+    CursorInvalidError,
+)
 
 from universal_ai_search.connections.crypto import (
     EncryptedEnvelope,
@@ -63,38 +67,16 @@ class GmailSyncRuntime:
                 self._repository.save_credentials(
                     claim, self._encrypted_credentials(claim, fresh)
                 )
-            history_id, page_token = self._progress(claim, sync_input.payload)
             access_token = fresh.access_token.get_secret_value()
-            if history_id is None:
-                history_id = asyncio.run(self._client.history_id(access_token))
-            page = asyncio.run(
-                self._client.page(access_token=access_token, page_token=page_token)
-            )
-            for document in page.documents:
-                self._index_repository.enqueue(
-                    claim.workspace_id, claim.connection_id, document
-                )
-            if page.next_page_token:
-                token_fingerprint = hashlib.sha256(
-                    page.next_page_token.encode()
-                ).hexdigest()
-                next_job_id = uuid5(
-                    claim.connection_id,
-                    f"gmail-full-page:{token_fingerprint}",
-                )
-                self._repository.advance(
-                    claim,
-                    next_job_id=next_job_id,
-                    token_fingerprint=token_fingerprint,
-                    encrypted_progress=self._encrypted_progress(
-                        claim,
-                        next_job_id=next_job_id,
-                        history_id=history_id,
-                        page_token=page.next_page_token,
-                    ),
-                )
+            mode = sync_input.payload.get("mode")
+            if mode == "full":
+                self._run_full(claim, sync_input, access_token)
+            elif mode == "incremental":
+                self._run_incremental(claim, sync_input, access_token)
             else:
-                self._repository.complete(claim, history_id=history_id)
+                raise GmailSyncPayloadError
+        except CursorInvalidError:
+            self._repository.recover_full(claim)
         except ConnectorError as error:
             self._repository.fail(
                 claim,
@@ -117,12 +99,102 @@ class GmailSyncRuntime:
             raise
         return True
 
+    def _run_full(
+        self, claim: ClaimedSyncJob, sync_input: GoogleSyncInput, access_token: str
+    ) -> None:
+        progress = self._progress(claim, sync_input.payload)
+        history_id = self._string_value(progress, "history_id")
+        page_token = self._string_value(progress, "page_token")
+        if history_id is None:
+            history_id = asyncio.run(self._client.history_id(access_token))
+        page = asyncio.run(
+            self._client.page(access_token=access_token, page_token=page_token)
+        )
+        for document in page.documents:
+            self._index_repository.enqueue(
+                claim.workspace_id, claim.connection_id, document
+            )
+        if page.next_page_token:
+            self._advance(
+                claim,
+                mode="full",
+                page_token=page.next_page_token,
+                progress={
+                    "history_id": history_id,
+                    "page_token": page.next_page_token,
+                },
+            )
+        else:
+            self._repository.complete(claim, history_id=history_id, mode="full")
+
+    def _run_incremental(
+        self, claim: ClaimedSyncJob, sync_input: GoogleSyncInput, access_token: str
+    ) -> None:
+        progress = self._progress(claim, sync_input.payload)
+        start_history_id = self._string_value(progress, "start_history_id")
+        page_token = self._string_value(progress, "page_token")
+        if start_history_id is None:
+            start_history_id = sync_input.history_id
+        if not start_history_id:
+            raise GmailSyncPayloadError
+        page = asyncio.run(
+            self._client.history_page(
+                access_token=access_token,
+                start_history_id=start_history_id,
+                page_token=page_token,
+            )
+        )
+        for document in page.documents:
+            self._index_repository.enqueue(
+                claim.workspace_id, claim.connection_id, document
+            )
+        for external_id in page.deleted_external_ids:
+            self._index_repository.tombstone(
+                claim.workspace_id, claim.connection_id, external_id
+            )
+        if page.next_page_token:
+            self._advance(
+                claim,
+                mode="incremental",
+                page_token=page.next_page_token,
+                progress={
+                    "start_history_id": start_history_id,
+                    "page_token": page.next_page_token,
+                },
+            )
+        else:
+            self._repository.complete(
+                claim, history_id=page.history_id, mode="incremental"
+            )
+
+    def _advance(
+        self,
+        claim: ClaimedSyncJob,
+        *,
+        mode: str,
+        page_token: str,
+        progress: dict[str, str],
+    ) -> None:
+        token_fingerprint = hashlib.sha256(
+            f"{claim.job_id}:{page_token}".encode()
+        ).hexdigest()
+        next_job_id = uuid5(claim.job_id, f"gmail-{mode}-page:{token_fingerprint}")
+        self._repository.advance(
+            claim,
+            mode=mode,
+            next_job_id=next_job_id,
+            token_fingerprint=token_fingerprint,
+            encrypted_progress=self._encrypted_progress(
+                claim, next_job_id=next_job_id, progress=progress
+            ),
+        )
+
     def _progress(
         self, claim: ClaimedSyncJob, payload: dict[str, object]
-    ) -> tuple[str | None, str | None]:
+    ) -> dict[str, object] | None:
         encoded = payload.get("gmail_progress")
         if encoded is None:
-            return None, None
+            return None
         if not isinstance(encoded, dict):
             raise GmailSyncPayloadError
         try:
@@ -140,13 +212,9 @@ class GmailSyncRuntime:
                 purpose="gmail-sync-progress",
             )
             progress = json.loads(self._encryption.decrypt(envelope, context=context))
-            history_id, page_token = (
-                progress["history_id"],
-                progress["page_token"],
-            )
-            if not isinstance(history_id, str) or not isinstance(page_token, str):
+            if not isinstance(progress, dict):
                 raise ValueError
-            return history_id, page_token
+            return progress
         except (
             InvalidTag,
             ValueError,
@@ -161,8 +229,7 @@ class GmailSyncRuntime:
         claim: ClaimedSyncJob,
         *,
         next_job_id: UUID,
-        history_id: str,
-        page_token: str,
+        progress: dict[str, str],
     ) -> EncryptedEnvelope:
         context = envelope_context(
             provider="google",
@@ -170,12 +237,21 @@ class GmailSyncRuntime:
             record_id=str(next_job_id),
             purpose="gmail-sync-progress",
         )
-        progress = json.dumps(
-            {"history_id": history_id, "page_token": page_token},
+        payload = json.dumps(
+            progress,
             sort_keys=True,
             separators=(",", ":"),
         ).encode()
-        return self._encryption.encrypt(progress, context=context)
+        return self._encryption.encrypt(payload, context=context)
+
+    @staticmethod
+    def _string_value(progress: dict[str, object] | None, key: str) -> str | None:
+        if progress is None:
+            return None
+        value = progress.get(key)
+        if not isinstance(value, str) or not value:
+            raise GmailSyncPayloadError
+        return value
 
     def _credentials(
         self, claim: ClaimedSyncJob, sync_input: GoogleSyncInput

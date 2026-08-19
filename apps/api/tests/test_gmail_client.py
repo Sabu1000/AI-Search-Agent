@@ -7,7 +7,11 @@ import httpx
 import pytest
 from pydantic import SecretStr
 from uas_connector_sdk import Credentials, Provider
-from uas_connector_sdk.errors import AuthenticationError, RateLimitError
+from uas_connector_sdk.errors import (
+    AuthenticationError,
+    CursorInvalidError,
+    RateLimitError,
+)
 
 from universal_ai_search.connections.gmail import (
     HttpGmailClient,
@@ -148,3 +152,47 @@ async def test_client_classifies_authentication_and_rate_limit_failures() -> Non
     with pytest.raises(RateLimitError) as error:
         await limited.history_id("access")
     assert error.value.retry_after_seconds == 7
+
+
+@pytest.mark.asyncio
+async def test_client_reads_history_changes_and_detects_expired_cursor() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/history"):
+            assert request.url.params["startHistoryId"] == "900"
+            assert request.url.params["maxResults"] == "100"
+            return httpx.Response(
+                200,
+                json={
+                    "historyId": "905",
+                    "nextPageToken": "history-page-2",
+                    "history": [
+                        {
+                            "id": "901",
+                            "messagesAdded": [{"message": {"id": "message-1"}}],
+                            "labelsRemoved": [{"message": {"id": "message-1"}}],
+                            "messagesDeleted": [{"message": {"id": "message-deleted"}}],
+                        }
+                    ],
+                },
+            )
+        return httpx.Response(200, json=message_payload("Updated through history"))
+
+    client = HttpGmailClient(
+        client_id="client",
+        client_secret="secret",
+        transport=httpx.MockTransport(handler),
+    )
+    page = await client.history_page(access_token="access", start_history_id="900")
+
+    assert page.history_id == "905"
+    assert page.next_page_token == "history-page-2"
+    assert [document.external_id for document in page.documents] == ["message-1"]
+    assert page.deleted_external_ids == ("message-deleted",)
+
+    expired = HttpGmailClient(
+        client_id="client",
+        client_secret="secret",
+        transport=httpx.MockTransport(lambda _: httpx.Response(404)),
+    )
+    with pytest.raises(CursorInvalidError):
+        await expired.history_page(access_token="access", start_history_id="old")

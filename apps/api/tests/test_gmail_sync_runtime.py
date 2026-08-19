@@ -8,13 +8,17 @@ from unittest.mock import Mock
 from uuid import UUID, uuid5
 
 from uas_connector_sdk import Credentials
-from uas_connector_sdk.errors import AuthenticationError, ProviderUnavailableError
+from uas_connector_sdk.errors import (
+    AuthenticationError,
+    CursorInvalidError,
+    ProviderUnavailableError,
+)
 
 from universal_ai_search.connections.crypto import (
     LocalEnvelopeEncryption,
     envelope_context,
 )
-from universal_ai_search.connections.gmail import GmailPage
+from universal_ai_search.connections.gmail import GmailHistoryPage, GmailPage
 from universal_ai_search.connections.google import GMAIL_READONLY_SCOPE
 from universal_ai_search.sync.repository import ClaimedSyncJob, GoogleSyncInput
 from universal_ai_search.sync.runtime import GmailSyncRuntime
@@ -29,7 +33,10 @@ def claim() -> ClaimedSyncJob:
 
 
 def encrypted_input(
-    encryption: LocalEnvelopeEncryption, *, payload: dict[str, object] | None = None
+    encryption: LocalEnvelopeEncryption,
+    *,
+    payload: dict[str, object] | None = None,
+    history_id: str | None = None,
 ) -> GoogleSyncInput:
     context = envelope_context(
         provider="google",
@@ -50,6 +57,7 @@ def encrypted_input(
         encryption.encrypt(raw, context=context),
         payload or {"mode": "full", "source_families": ["gmail"]},
         frozenset({GMAIL_READONLY_SCOPE}),
+        history_id,
     )
 
 
@@ -85,6 +93,7 @@ class FakeClient:
     def __init__(self) -> None:
         self.failure: Exception | None = None
         self.page_result = GmailPage((), None)
+        self.history_result = GmailHistoryPage((), (), "history-2", None)
 
     async def ensure_fresh(self, credentials: Credentials) -> Credentials:
         return credentials
@@ -97,6 +106,11 @@ class FakeClient:
 
     async def page(self, **_: object) -> GmailPage:
         return self.page_result
+
+    async def history_page(self, **_: object) -> GmailHistoryPage:
+        if self.failure:
+            raise self.failure
+        return self.history_result
 
 
 def runtime(repository: Mock, client: FakeClient) -> GmailSyncRuntime:
@@ -134,7 +148,9 @@ def test_empty_queue_and_completed_page() -> None:
     repository = Mock()
     sync = runtime(repository, FakeClient())
     assert sync.run_once("worker") is True
-    repository.complete.assert_called_once_with(claim(), history_id="history-1")
+    repository.complete.assert_called_once_with(
+        claim(), history_id="history-1", mode="full"
+    )
     repository.fail.assert_not_called()
 
 
@@ -159,14 +175,15 @@ def test_next_page_is_durably_advanced_without_reloading_history() -> None:
     )
 
     assert sync.run_once("worker") is True
-    token_fingerprint = hashlib.sha256(b"page-2").hexdigest()
+    token_fingerprint = hashlib.sha256(f"{JOB_ID}:page-2".encode()).hexdigest()
     next_job_id = uuid5(
-        CONNECTION_ID,
+        JOB_ID,
         f"gmail-full-page:{token_fingerprint}",
     )
     repository.advance.assert_called_once()
     assert repository.advance.call_args.args == (claim(),)
     values = repository.advance.call_args.kwargs
+    assert values["mode"] == "full"
     assert values["next_job_id"] == next_job_id
     assert values["token_fingerprint"] == token_fingerprint
     context = envelope_context(
@@ -178,6 +195,44 @@ def test_next_page_is_durably_advanced_without_reloading_history() -> None:
     assert json.loads(
         encryption.decrypt(values["encrypted_progress"], context=context)
     ) == {"history_id": "history-1", "page_token": "page-2"}
+
+
+def test_incremental_page_tombstones_and_advances_cursor() -> None:
+    repository = Mock()
+    client = FakeClient()
+    client.history_result = GmailHistoryPage(
+        (), ("removed-message",), "history-2", None
+    )
+    sync = runtime(repository, client)
+    repository.load.return_value = encrypted_input(
+        LocalEnvelopeEncryption(b"e" * 32),
+        payload={"mode": "incremental", "source_families": ["gmail"]},
+        history_id="history-1",
+    )
+
+    assert sync.run_once("worker") is True
+    sync._index_repository.tombstone.assert_called_once_with(  # noqa: SLF001
+        WORKSPACE_ID, CONNECTION_ID, "removed-message"
+    )
+    repository.complete.assert_called_once_with(
+        claim(), history_id="history-2", mode="incremental"
+    )
+
+
+def test_expired_incremental_cursor_schedules_full_recovery() -> None:
+    repository = Mock()
+    client = FakeClient()
+    client.failure = CursorInvalidError()
+    sync = runtime(repository, client)
+    repository.load.return_value = encrypted_input(
+        LocalEnvelopeEncryption(b"e" * 32),
+        payload={"mode": "incremental", "source_families": ["gmail"]},
+        history_id="expired-history",
+    )
+
+    assert sync.run_once("worker") is True
+    repository.recover_full.assert_called_once_with(claim())
+    repository.fail.assert_not_called()
 
 
 def test_provider_failures_are_safely_classified() -> None:

@@ -12,7 +12,7 @@ from universal_ai_search.connections.crypto import (
     LocalEnvelopeEncryption,
     envelope_context,
 )
-from universal_ai_search.connections.gmail import GmailPage
+from universal_ai_search.connections.gmail import GmailHistoryPage, GmailPage
 from universal_ai_search.connections.google import GMAIL_READONLY_SCOPE
 from universal_ai_search.indexing.pipeline import IndexingPipeline
 from universal_ai_search.indexing.repository import IndexRepository
@@ -61,6 +61,32 @@ class FakeGmailClient:
                 ),
             ),
             "page-2" if page_token is None else None,
+        )
+
+    async def history_page(self, **values: object) -> GmailHistoryPage:
+        assert values["access_token"] == "synthetic-access"
+        assert values["start_history_id"] == "history-100"
+        assert values["page_token"] is None
+        return GmailHistoryPage(
+            (
+                NormalizedDocument(
+                    external_id="gmail-message-1",
+                    provider=Provider.GMAIL,
+                    source_type="email",
+                    title="Gmail integration test updated",
+                    content="Subject: Gmail integration test updated\n\nNew content.",
+                    canonical_url=(
+                        "https://mail.google.com/mail/u/0/#all/gmail-message-1"
+                    ),
+                    mime_type="text/plain",
+                    authors=("sender@example.test",),
+                    created_at=datetime(2026, 8, 15, tzinfo=UTC),
+                    provider_metadata={"thread_id": "thread-1"},
+                ),
+            ),
+            ("gmail-message-2",),
+            "history-200",
+            None,
         )
 
 
@@ -212,3 +238,35 @@ def test_gmail_full_sync_queues_indexes_and_commits_cursor(
             ),
         ]
     )
+
+    connection.execute(
+        "UPDATE app.jobs SET available_at = clock_timestamp() "
+        "WHERE connection_id = %s AND job_type = 'sync' AND status = 'pending' "
+        "AND payload ->> 'mode' = 'incremental'",
+        (CONNECTION_ID,),
+    )
+    connection.commit()
+    assert sync_runtime.run_once("gmail-database-test")
+    assert IndexingRuntime(index_repository, IndexingPipeline()).run_once(
+        "gmail-index-test"
+    )
+    assert connection.execute(
+        "SELECT cursor ->> 'history_id' FROM app.connection_cursors "
+        "WHERE connection_id = %s AND stream = 'gmail'",
+        (CONNECTION_ID,),
+    ).fetchone() == ("history-200",)
+    assert connection.execute(
+        "SELECT external_id, state FROM app.sources WHERE connection_id = %s "
+        "ORDER BY external_id",
+        (CONNECTION_ID,),
+    ).fetchall() == [
+        ("gmail-message-1", "active"),
+        ("gmail-message-2", "deleted"),
+    ]
+    assert connection.execute(
+        "SELECT version.normalized_text FROM app.sources AS source "
+        "JOIN app.document_versions AS version "
+        "ON version.id = source.current_document_version_id "
+        "WHERE source.connection_id = %s AND source.external_id = 'gmail-message-1'",
+        (CONNECTION_ID,),
+    ).fetchone() == ("Subject: Gmail integration test updated\n\nNew content.",)

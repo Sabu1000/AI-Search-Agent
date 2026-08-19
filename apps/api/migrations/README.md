@@ -16,6 +16,7 @@ Initial-schema downgrade is supported only for empty development/test
 databases; production recovery rolls application code forward or restores a
 tested backup instead of discarding accepted user data.
 
-The current application revision is `0004_gmail_sync_runtime`. It adds the
-fixed-search-path, `SECURITY DEFINER` Gmail job-claim function used by the
-non-`BYPASSRLS` worker; its downgrade removes only that function.
+The current application revision is `0005_gmail_incremental_sync`. It extends
+the fixed-search-path, `SECURITY DEFINER` Gmail job-claim function so the
+non-`BYPASSRLS` worker can claim both full and incremental jobs. Downgrading the
+revision restores the full-only claim behavior from `0004_gmail_sync_runtime`.

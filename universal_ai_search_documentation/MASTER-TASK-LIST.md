@@ -153,7 +153,7 @@ Rules:
 - [x] P5-001 Google OAuth scopes
 - [x] P5-002 Gmail API client
 - [x] P5-003 Initial sync
-- [ ] P5-004 Incremental sync
+- [x] P5-004 Incremental sync
 - [ ] P5-005 Email parser
 - [ ] P5-006 Attachment extraction
 - [ ] P5-007 Metadata extraction

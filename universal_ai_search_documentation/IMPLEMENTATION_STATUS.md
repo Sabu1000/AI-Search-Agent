@@ -30,16 +30,16 @@ shells are never counted as finished user features.
 | `01_PROJECT_SPEC.md` | Complete | MVP partial (`1/11`) | `AUTH-001` passes end to end; the other 10 MVP requirements remain partial or not started. See the requirement audit below. |
 | `02_SYSTEM_ARCHITECTURE.md` | Complete | Partial | Process shells, local dependencies, schema migration ordering, revision-aware API readiness, a fail-closed HTTP boundary, database-backed authentication/authorization, durable Gmail/index workers, and hybrid search exist. Drive/GitHub/desktop orchestration, model streaming, and remaining product services do not. |
 | `03_SEARCH_ENGINE_DESIGN.md` | Complete | Local-index backend implemented; product phase partial | Exact/title, PostgreSQL FTS, pgvector, and trigram lanes run inside API-role RLS; typed filters, weighted RRF, deterministic reranking/deduplication, bounded context, extractive claims/citations, history persistence, safe empty answers, and `/v1/search` pass unit and live PostgreSQL tests. Production semantic/model adapters, relevance evaluation corpus, conflict evaluator, cache, and UI remain. |
-| `04_DATABASE_SCHEMA.md` | Complete | Database runtime implemented; phase partial | Alembic creates `33/33` specified tables, authoritative index/Gmail claim functions, constraints, indexes, roles, grants, and forced RLS. Compose migrates before API startup; readiness checks revision `0004_gmail_sync_runtime`; 19 PostgreSQL integration tests cover auth, Google authorization, Gmail-to-index synchronization, indexing/search, catalog, lifecycle, and tenant isolation. Seed data, backup automation, and the Phase 3 review remain. |
+| `04_DATABASE_SCHEMA.md` | Complete | Database runtime implemented; phase partial | Alembic creates `33/33` specified tables, authoritative index/Gmail claim functions, constraints, indexes, roles, grants, and forced RLS. Compose migrates before API startup; readiness checks revision `0005_gmail_incremental_sync`; 19 PostgreSQL integration tests cover auth, Google authorization, Gmail full/incremental synchronization, indexing/search, catalog, lifecycle, and tenant isolation. Seed data, backup automation, and the Phase 3 review remain. |
 | `05_API_SPECIFICATION.md` | Complete | API platform, auth, search, and Google authorization implemented; product API partial | FastAPI has the OpenAPI 3.1 `/v1` boundary, request IDs, strict serialization, RFC 9457 problems, signed cursors, idempotency primitives, and working authentication/workspace backends. `9/49` catalogued product endpoints exist; rate limiting, SSE, remaining repositories, and other feature services remain. |
-| `06_CONNECTOR_FRAMEWORK.md` | Complete | SDK, OAuth, and Gmail initial sync implemented; provider ecosystem partial | The typed SDK, four change variants, registry, retry policy, runtime stream validator, fake connector, Docker gate, OAuth transaction manager, encrypted token store, read-only Gmail client, bounded pagination, token refresh, sanitized failures, and initial full-sync consumer are implemented. Incremental Gmail, Drive, GitHub, local files, general scheduling, logging, and metrics remain. |
+| `06_CONNECTOR_FRAMEWORK.md` | Complete | SDK, OAuth, and Gmail full/incremental sync implemented; provider ecosystem partial | The typed SDK, four change variants, registry, retry policy, runtime stream validator, fake connector, Docker gate, OAuth transaction manager, encrypted token store, read-only Gmail client, bounded full/history pagination, token refresh, sanitized failures, tombstones, and cursor recovery are implemented. Drive, GitHub, local files, general scheduling, logging, and metrics remain. |
 | `07_INDEXING_PIPELINE.md` | Complete | Normalized text/Markdown path implemented | Deterministic normalization, language selection, structural chunking, exact/near deduplication, local 1,536-dimensional embeddings, durable PostgreSQL leasing, atomic promotion, unchanged skips, and re-index supersession pass unit and PostgreSQL/pgvector tests. Provider-specific binary parsers and production embedding providers remain later integrations. |
 | `08_SECURITY_AND_PRIVACY.md` | Complete | Partial controls | The threat model, data classification, tenant/cryptographic boundaries, browser/input/model defenses, audit/redaction policy, deletion/backup rules, and security release gates are implementation-ready. Existing RLS, strict API boundaries, secret validation, and containerized tests implement only part of the required controls. |
 | `09_AUTH_AND_OAUTH.md` | Complete | Authentication, Google connection authorization, and worker refresh implemented; remaining provider/recovery work partial | Existing password/session behavior includes single-use Google callbacks, PKCE S256, exact read-only scopes, envelope-encrypted credentials, per-family jobs, in-memory worker decryption, and re-encryption after access-token refresh. Password recovery, reauthentication, Google login, GitHub authorization, revocation, key rotation/KMS integration, abuse throttling, and the full security review remain. |
 
 The active implementation slice is provider and desktop integration through
-backfill `B7`. Google authorization and Gmail initial full sync into the local
-index are complete; Gmail history-based incremental synchronization is next.
+backfill `B7`. Google authorization and Gmail full/incremental sync into the
+local index are complete; advanced Gmail email parsing is next.
 
 ## MVP requirement audit
 
@@ -108,7 +108,7 @@ logging, metrics, and the Phase 4 review remain open.
 - `app_api`, `app_worker`, and `app_audit_reader` are non-login,
   non-`BYPASSRLS` roles. Identity and tenant tables use forced, fail-closed RLS.
 - Compose runs migrations to completion before starting the API and worker, and
-  readiness rejects any revision other than `0004_gmail_sync_runtime`.
+  readiness rejects any revision other than `0005_gmail_incremental_sync`.
 - An ephemeral PostgreSQL 16/pgvector Docker suite runs Python quality gates
   and `19` authentication, Google/Gmail, indexing, search, catalog,
   migration-lifecycle, foreign-key, and tenant-isolation tests in CI.
@@ -163,7 +163,7 @@ user-visible workflows.
   functions and forced RLS protect account, session, and membership reads.
 - Six catalogued endpoints implement register, email verification, login,
   refresh, logout, and `me`; the Next.js page provides their minimal UI.
-- `102 backend tests at 91.41% line coverage`, `19 PostgreSQL integration tests`,
+- `105 backend tests at 91.09% line coverage`, `19 PostgreSQL integration tests`,
   web checks, production builds, Docker health checks, and
   `scripts/smoke-auth.py` cover the slice.
 
@@ -219,7 +219,7 @@ Search-engine master tasks complete: `9/9`, `P9-001` through `P9-009`, for the
 local-index backend scope. Production model synthesis, labeled quality gates,
 and user-facing search/chat screens remain later phases.
 
-### Gmail initial synchronization
+### Gmail full and incremental synchronization
 
 - The read-only Gmail client refreshes expiring Google credentials, maps
   provider failures to sanitized SDK codes, reads a profile history ID, lists
@@ -227,8 +227,9 @@ and user-facing search/chat screens remain later phases.
 - Deterministic normalization preserves subject, sender, recipients, sent time,
   labels, thread/history IDs, safe canonical targets, and inert plain text.
   HTML is used only as an inert fallback; attachments are not fetched yet.
-- Revision `0004_gmail_sync_runtime` adds an authoritative, fixed-search-path
-  sync-job claim function for the non-`BYPASSRLS` worker role.
+- Revisions `0004_gmail_sync_runtime` and `0005_gmail_incremental_sync` add and
+  extend an authoritative, fixed-search-path sync-job claim function for the
+  non-`BYPASSRLS` worker role.
 - Each provider page durably queues idempotent index jobs before a continuation
   job is committed. Continuation progress is envelope-encrypted in the job payload,
   while a one-way token fingerprint supplies idempotency. Only the final page
@@ -236,12 +237,19 @@ and user-facing search/chat screens remain later phases.
 - Revoked refresh credentials mark the connection
   `reauthorization_required`; transient provider failures enter bounded durable
   retry, and raw tokens/provider bodies are never written to jobs or errors.
-- The PostgreSQL end-to-end test proves synthetic Gmail page → sync lease →
-  normalized source → index job → ready chunks/embeddings → committed cursor.
+- Completed full sync schedules bounded Gmail history polling. Incremental pages
+  refetch adds and label changes, tombstone deleted messages, encrypt continuation
+  progress, and commit the returned history cursor only on the last page.
+- An expired Gmail cursor records `CURSOR_INVALID` and schedules a controlled
+  full recovery without inventing or advancing a cursor.
+- The PostgreSQL end-to-end test proves synthetic full pages → ready index →
+  incremental update/delete → re-index/tombstone → committed cursor.
 
-Gmail master tasks complete: `3/11`: `P5-001` through `P5-003`. Incremental
-history sync is next; advanced parsing, attachments, reconciliation/deletion,
-error recovery certification, and the phase review remain open.
+Gmail master tasks complete: `4/11`: `P5-001` through `P5-004`. Incremental
+deletions are immediately hidden from search, but `P5-009` remains open for
+derived-content purge and full-list absence reconciliation. Advanced parsing,
+attachments, metadata/normalization certification, error recovery
+certification, and the phase review also remain open.
 
 ## Explicitly unimplemented inventory
 
@@ -251,8 +259,8 @@ The following do not exist in production code yet:
   authentication, search, indexing, and connection repositories.
 - Password recovery, reauthentication, Google login, GitHub authorization,
   production KMS integration, authentication abuse throttling, and account profile editing.
-- Incremental Gmail synchronization and real Drive, GitHub, or local-file
-  content clients. Gmail initial full synchronization is implemented.
+- Real Drive, GitHub, or local-file content clients. Gmail full and incremental
+  synchronization are implemented.
 - Attachments, advanced email/PDF/Office parsers, OCR, production semantic
   embeddings, and provider-specific extraction policies.
 - Conversations, production model calls, streamed answers, or conflict-aware
@@ -277,7 +285,7 @@ define design ownership:
 | `B4` | Authentication vertical slice | **Complete:** users, password/session security, register/verify/login/refresh/logout/me endpoints, workspace bootstrap, minimal UI, PostgreSQL tests, and a live Docker smoke test. |
 | `B5` | Stage 07 indexing design and implementation | **Complete:** deterministic text/Markdown extraction, chunking, deduplication, local embeddings, durable jobs, authoritative worker claims, atomic promotion, and fake-connector-to-index PostgreSQL tests. |
 | `B6` | Stage 03 search implementation | **Complete:** tenant-safe exact/FTS/vector/trigram retrieval, filters, fusion/ranking, bounded context, extractive citations, search API/history, and unit/PostgreSQL tests. |
-| `B7` | Real provider and desktop slices | **In progress:** Google authorization plus bounded Gmail initial sync into the searchable index are complete. Incremental Gmail history sync is next, followed by advanced Gmail handling, Drive, GitHub, then local desktop behavior, each certified and integrated end to end. |
+| `B7` | Real provider and desktop slices | **In progress:** Google authorization plus bounded Gmail full/incremental sync into the searchable index are complete. Advanced Gmail handling is next, followed by Drive, GitHub, then local desktop behavior, each certified and integrated end to end. |
 
 The active backfill item is always the first unfinished row. Backfills `B0`
 through `B6` are complete; `B7` is active. No later slice may be reported

@@ -15,6 +15,7 @@ from pydantic import SecretStr
 from uas_connector_sdk import Credentials, NormalizedDocument, Provider
 from uas_connector_sdk.errors import (
     AuthenticationError,
+    CursorInvalidError,
     MalformedItemError,
     PermissionDeniedError,
     ProviderUnavailableError,
@@ -25,12 +26,21 @@ from .google import GMAIL_READONLY_SCOPE, GOOGLE_TOKEN_ENDPOINT
 
 GMAIL_API_ROOT = "https://gmail.googleapis.com/gmail/v1/users/me"
 GMAIL_PAGE_SIZE = 25
+GMAIL_HISTORY_PAGE_SIZE = 100
 _EXPIRY_SKEW = timedelta(minutes=2)
 
 
 @dataclass(frozen=True)
 class GmailPage:
     documents: tuple[NormalizedDocument, ...]
+    next_page_token: str | None
+
+
+@dataclass(frozen=True)
+class GmailHistoryPage:
+    documents: tuple[NormalizedDocument, ...]
+    deleted_external_ids: tuple[str, ...]
+    history_id: str
     next_page_token: str | None
 
 
@@ -286,6 +296,85 @@ class HttpGmailClient:
             raise MalformedItemError("Gmail page token is invalid")
         return GmailPage(tuple(documents), next_page_token)
 
+    async def history_page(
+        self,
+        *,
+        access_token: str,
+        start_history_id: str,
+        page_token: str | None = None,
+    ) -> GmailHistoryPage:
+        params: dict[str, str | int] = {
+            "maxResults": GMAIL_HISTORY_PAGE_SIZE,
+            "startHistoryId": start_history_id,
+        }
+        if page_token:
+            params["pageToken"] = page_token
+        response = await self._request(
+            "history", access_token=access_token, params=params
+        )
+        if response.status_code == 404:
+            raise CursorInvalidError()
+        listing = _json(response)
+        records = listing.get("history", [])
+        if not isinstance(records, list):
+            raise MalformedItemError("Gmail history listing is invalid")
+
+        actions: dict[str, bool] = {}
+        for record in records:
+            if not isinstance(record, dict) or not isinstance(record.get("id"), str):
+                raise MalformedItemError("Gmail history record is invalid")
+            for field in ("messagesAdded", "labelsAdded", "labelsRemoved"):
+                for message_id in _history_message_ids(record.get(field)):
+                    actions[message_id] = False
+            for message_id in _history_message_ids(record.get("messagesDeleted")):
+                actions[message_id] = True
+
+        documents: list[NormalizedDocument] = []
+        deleted = {
+            message_id for message_id, is_deleted in actions.items() if is_deleted
+        }
+        for message_id, is_deleted in actions.items():
+            if is_deleted:
+                continue
+            message_response = await self._request(
+                f"messages/{message_id}",
+                access_token=access_token,
+                params={"format": "full"},
+            )
+            if message_response.status_code == 404:
+                deleted.add(message_id)
+                continue
+            documents.append(normalize_gmail_message(_json(message_response)))
+
+        history_id = listing.get("historyId")
+        next_page_token = listing.get("nextPageToken")
+        if not isinstance(history_id, str) or not history_id:
+            raise MalformedItemError("Gmail history cursor is invalid")
+        if next_page_token is not None and not isinstance(next_page_token, str):
+            raise MalformedItemError("Gmail history page token is invalid")
+        return GmailHistoryPage(
+            tuple(documents), tuple(sorted(deleted)), history_id, next_page_token
+        )
+
+    async def _request(
+        self,
+        path: str,
+        *,
+        access_token: str,
+        params: dict[str, str | int] | None = None,
+    ) -> httpx.Response:
+        try:
+            async with httpx.AsyncClient(
+                timeout=20, transport=self._transport
+            ) as client:
+                return await client.get(
+                    f"{GMAIL_API_ROOT}/{path}",
+                    headers={"Authorization": f"Bearer {access_token}"},
+                    params=params,
+                )
+        except httpx.HTTPError as error:
+            raise ProviderUnavailableError() from error
+
     async def _get(
         self,
         path: str,
@@ -293,15 +382,21 @@ class HttpGmailClient:
         access_token: str,
         params: dict[str, str | int] | None = None,
     ) -> dict[str, object]:
-        try:
-            async with httpx.AsyncClient(
-                timeout=20, transport=self._transport
-            ) as client:
-                response = await client.get(
-                    f"{GMAIL_API_ROOT}/{path}",
-                    headers={"Authorization": f"Bearer {access_token}"},
-                    params=params,
-                )
-        except httpx.HTTPError as error:
-            raise ProviderUnavailableError() from error
+        response = await self._request(path, access_token=access_token, params=params)
         return _json(response)
+
+
+def _history_message_ids(value: object) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if not isinstance(value, list):
+        raise MalformedItemError("Gmail history change is invalid")
+    result: list[str] = []
+    for change in value:
+        if not isinstance(change, dict):
+            raise MalformedItemError("Gmail history change is invalid")
+        message = change.get("message")
+        if not isinstance(message, dict) or not isinstance(message.get("id"), str):
+            raise MalformedItemError("Gmail history message is invalid")
+        result.append(message["id"])
+    return tuple(result)

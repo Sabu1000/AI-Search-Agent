@@ -240,6 +240,71 @@ class IndexRepository:
             )
             return EnqueueResult(EnqueueStatus.QUEUED, source_id, version_id, job_id)
 
+    def tombstone(
+        self, workspace_id: UUID, connection_id: UUID, external_id: str
+    ) -> bool:
+        """Make a provider-deleted source immediately unavailable to search."""
+
+        source_id = uuid5(connection_id, external_id)
+        with psycopg.connect(self._database_url, row_factory=dict_row) as connection:
+            self._set_worker_context(connection, workspace_id)
+            source = connection.execute(
+                """SELECT source.state, source.current_document_version_id,
+                    version.extracted_bytes
+                FROM app.sources AS source
+                LEFT JOIN app.document_versions AS version
+                  ON version.id = source.current_document_version_id
+                WHERE source.id = %s AND source.workspace_id = %s
+                  AND source.connection_id = %s FOR UPDATE OF source""",
+                (source_id, workspace_id, connection_id),
+            ).fetchone()
+            if source is None or source["state"] == "deleted":
+                return False
+            extracted_bytes = int(source["extracted_bytes"] or 0)
+            indexed_source_delta = (
+                1 if source["current_document_version_id"] is not None else 0
+            )
+            connection.execute(
+                """UPDATE app.sources SET state = 'deleted',
+                    deleted_at = clock_timestamp(), updated_at = clock_timestamp(),
+                    lock_version = lock_version + 1 WHERE id = %s""",
+                (source_id,),
+            )
+            connection.execute(
+                """UPDATE app.jobs SET status = 'failed', error_code = 'SOURCE_DELETED',
+                    completed_at = clock_timestamp(), updated_at = clock_timestamp()
+                WHERE source_id = %s AND job_type = 'index'
+                  AND status IN ('pending', 'retry_wait')""",
+                (source_id,),
+            )
+            connection.execute(
+                """UPDATE app.workspace_usage SET
+                    indexed_source_count = GREATEST(indexed_source_count - %s, 0),
+                    extracted_bytes = GREATEST(extracted_bytes - %s, 0),
+                    updated_at = clock_timestamp(), lock_version = lock_version + 1
+                WHERE workspace_id = %s""",
+                (indexed_source_delta, extracted_bytes, workspace_id),
+            )
+            connection.execute(
+                """UPDATE app.workspaces SET search_index_generation =
+                    search_index_generation + 1, updated_at = clock_timestamp(),
+                    lock_version = lock_version + 1 WHERE id = %s""",
+                (workspace_id,),
+            )
+            connection.execute(
+                """INSERT INTO app.outbox_events (
+                    id, workspace_id, aggregate_type, aggregate_id, event_type, payload
+                ) VALUES (%s, %s, 'source', %s, 'index.source_deleted', %s::JSONB)
+                ON CONFLICT (id) DO NOTHING""",
+                (
+                    uuid5(source_id, "provider-delete"),
+                    workspace_id,
+                    source_id,
+                    json.dumps({"source_id": str(source_id)}),
+                ),
+            )
+            return True
+
     def claim(self, worker_id: str, lease_seconds: int = 120) -> ClaimedJob | None:
         with psycopg.connect(self._database_url, row_factory=dict_row) as connection:
             self._set_worker_context(connection)
@@ -286,6 +351,7 @@ class IndexRepository:
                   ON source.id = version.source_id
                  AND source.content_hash = version.content_hash
                  AND source.permissions_hash = version.permissions_hash
+                 AND source.state = 'active'
                 LEFT JOIN app.document_versions AS old
                   ON old.id = source.current_document_version_id
                 WHERE job.id = %s AND job.status = 'leased'
