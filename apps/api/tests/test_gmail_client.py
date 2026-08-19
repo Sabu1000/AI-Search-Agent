@@ -10,11 +10,13 @@ from uas_connector_sdk import Credentials, Provider
 from uas_connector_sdk.errors import (
     AuthenticationError,
     CursorInvalidError,
+    MalformedItemError,
     RateLimitError,
 )
 
 from universal_ai_search.connections.gmail import (
     HttpGmailClient,
+    normalize_gmail_documents,
     normalize_gmail_message,
 )
 from universal_ai_search.connections.google import (
@@ -71,6 +73,142 @@ def test_normalize_gmail_message_preserves_stable_searchable_fields() -> None:
         "thread_id": "thread-1",
     }
     assert "access_token" not in repr(document)
+
+
+@pytest.mark.asyncio
+async def test_client_fetches_text_attachments_as_separate_stable_documents() -> None:
+    message = message_payload("Message body only")
+    payload = message["payload"]
+    assert isinstance(payload, dict)
+    payload["mimeType"] = "multipart/mixed"
+    payload["parts"] = [
+        {
+            "partId": "0",
+            "mimeType": "text/plain",
+            "body": {"data": encoded("Message body only")},
+        },
+        {
+            "partId": "1",
+            "filename": "notes.txt",
+            "mimeType": "text/plain",
+            "headers": [{"name": "Content-Type", "value": "text/plain; charset=utf-8"}],
+            "body": {"data": encoded("Inline attachment text"), "size": 22},
+        },
+        {
+            "partId": "2",
+            "filename": "data.json",
+            "mimeType": "application/json",
+            "headers": [
+                {"name": "Content-Type", "value": "application/json; charset=utf-8"}
+            ],
+            "body": {"attachmentId": "external-json", "size": 18},
+        },
+        {
+            "partId": "3",
+            "filename": "report.pdf",
+            "mimeType": "application/pdf",
+            "body": {"attachmentId": "external-pdf", "size": 900},
+        },
+        {
+            "partId": "4",
+            "filename": "large.txt",
+            "mimeType": "text/plain",
+            "body": {"attachmentId": "external-large", "size": 5_000_001},
+        },
+    ]
+    requests: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request.url.path)
+        if request.url.path.endswith("/messages"):
+            return httpx.Response(200, json={"messages": [{"id": "message-1"}]})
+        if request.url.path.endswith("/attachments/external-json"):
+            return httpx.Response(
+                200, json={"data": encoded('{"searchable": true}'), "size": 18}
+            )
+        return httpx.Response(200, json=message)
+
+    client = HttpGmailClient(
+        client_id="client",
+        client_secret="secret",
+        transport=httpx.MockTransport(handler),
+    )
+    page = await client.page(access_token="access")
+
+    assert [document.external_id for document in page.documents] == [
+        "message-1",
+        "message-1:attachment:1",
+        "message-1:attachment:2",
+        "message-1:attachment:3",
+        "message-1:attachment:4",
+    ]
+    inline, external, unsupported, oversized = page.documents[1:]
+    assert inline.source_type == "attachment"
+    assert inline.content.endswith("Inline attachment text")
+    assert external.mime_type == "application/json"
+    assert external.content.endswith('{"searchable": true}')
+    assert unsupported.provider_metadata["extraction_status"] == "unsupported"
+    assert unsupported.provider_metadata["original_mime_type"] == "application/pdf"
+    assert oversized.provider_metadata["extraction_status"] == "too_large"
+    assert (
+        requests.count(
+            "/gmail/v1/users/me/messages/message-1/attachments/external-json"
+        )
+        == 1
+    )
+    assert not any("external-pdf" in path for path in requests)
+    assert not any("external-large" in path for path in requests)
+
+
+@pytest.mark.asyncio
+async def test_client_hydrates_a_separately_stored_message_body() -> None:
+    message = message_payload()
+    payload = message["payload"]
+    assert isinstance(payload, dict)
+    payload["parts"] = [
+        {
+            "partId": "0",
+            "mimeType": "text/plain",
+            "body": {"attachmentId": "large-body", "size": 21},
+        }
+    ]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/messages"):
+            return httpx.Response(200, json={"messages": [{"id": "message-1"}]})
+        if request.url.path.endswith("/attachments/large-body"):
+            return httpx.Response(
+                200, json={"data": encoded("Externally stored body"), "size": 21}
+            )
+        return httpx.Response(200, json=message)
+
+    client = HttpGmailClient(
+        client_id="client",
+        client_secret="secret",
+        transport=httpx.MockTransport(handler),
+    )
+
+    page = await client.page(access_token="access")
+
+    assert len(page.documents) == 1
+    assert "Externally stored body" in page.documents[0].content
+
+
+def test_attachment_normalization_rejects_duplicate_part_identity() -> None:
+    message = message_payload()
+    payload = message["payload"]
+    assert isinstance(payload, dict)
+    attachment = {
+        "partId": "1",
+        "filename": "duplicate.txt",
+        "mimeType": "text/plain",
+        "body": {"data": encoded("content"), "size": 7},
+    }
+    payload["mimeType"] = "multipart/mixed"
+    payload["parts"] = [attachment, dict(attachment)]
+
+    with pytest.raises(MalformedItemError):
+        normalize_gmail_documents(message)
 
 
 @pytest.mark.asyncio

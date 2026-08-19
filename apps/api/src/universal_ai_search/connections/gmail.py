@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from contextlib import suppress
+from copy import deepcopy
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from email.utils import parseaddr
 from typing import cast
+from urllib.parse import quote
 
 import httpx
 from pydantic import SecretStr
@@ -21,6 +23,12 @@ from uas_connector_sdk.errors import (
 )
 
 from .email_parser import decode_mime_header, parse_gmail_payload
+from .gmail_attachments import (
+    MAX_ATTACHMENT_BYTES,
+    apply_external_part_data,
+    external_text_part_ids,
+    normalize_gmail_attachments,
+)
 from .google import GMAIL_READONLY_SCOPE, GOOGLE_TOKEN_ENDPOINT
 
 GMAIL_API_ROOT = "https://gmail.googleapis.com/gmail/v1/users/me"
@@ -159,8 +167,35 @@ def normalize_gmail_message(message: dict[str, object]) -> NormalizedDocument:
     )
 
 
+def normalize_gmail_documents(
+    message: dict[str, object],
+) -> tuple[NormalizedDocument, ...]:
+    """Normalize a Gmail message and each of its stable attachment sources."""
+
+    document = normalize_gmail_message(message)
+    payload = message.get("payload")
+    thread_id = message.get("threadId")
+    if not isinstance(payload, dict) or not isinstance(thread_id, str):
+        raise MalformedItemError("Gmail message is missing required fields")
+    fields = _headers(cast(dict[str, object], payload))
+    sender = fields.get("from", "")
+    author = parseaddr(sender)[1] or sender
+    if document.created_at is None:
+        raise MalformedItemError("Gmail message timestamp is invalid")
+    attachments = normalize_gmail_attachments(
+        message_id=document.external_id,
+        thread_id=thread_id,
+        subject=document.title,
+        sender=sender,
+        author=author,
+        sent_at=document.created_at,
+        payload=cast(dict[str, object], payload),
+    )
+    return (document, *attachments)
+
+
 class HttpGmailClient:
-    """Small async adapter around only the Gmail endpoints required for full sync."""
+    """Read-only bounded Gmail message, history, and attachment adapter."""
 
     def __init__(
         self,
@@ -250,7 +285,9 @@ class HttpGmailClient:
                 access_token=access_token,
                 params={"format": "full"},
             )
-            documents.append(normalize_gmail_message(message))
+            documents.extend(
+                await self._message_documents(message, access_token=access_token)
+            )
         next_page_token = listing.get("nextPageToken")
         if next_page_token is not None and not isinstance(next_page_token, str):
             raise MalformedItemError("Gmail page token is invalid")
@@ -304,7 +341,11 @@ class HttpGmailClient:
             if message_response.status_code == 404:
                 deleted.add(message_id)
                 continue
-            documents.append(normalize_gmail_message(_json(message_response)))
+            documents.extend(
+                await self._message_documents(
+                    _json(message_response), access_token=access_token
+                )
+            )
 
         history_id = listing.get("historyId")
         next_page_token = listing.get("nextPageToken")
@@ -315,6 +356,38 @@ class HttpGmailClient:
         return GmailHistoryPage(
             tuple(documents), tuple(sorted(deleted)), history_id, next_page_token
         )
+
+    async def _message_documents(
+        self, message: dict[str, object], *, access_token: str
+    ) -> tuple[NormalizedDocument, ...]:
+        hydrated = deepcopy(message)
+        payload = hydrated.get("payload")
+        message_id = hydrated.get("id")
+        if not isinstance(payload, dict) or not isinstance(message_id, str):
+            raise MalformedItemError("Gmail message is missing required fields")
+        data_by_attachment_id: dict[str, str] = {}
+        for attachment_id in external_text_part_ids(cast(dict[str, object], payload)):
+            response = await self._get(
+                "messages/"
+                f"{quote(message_id, safe='')}/attachments/"
+                f"{quote(attachment_id, safe='')}",
+                access_token=access_token,
+            )
+            data = response.get("data")
+            size = response.get("size", 0)
+            if (
+                not isinstance(data, str)
+                or not isinstance(size, int)
+                or isinstance(size, bool)
+                or size < 0
+                or size > MAX_ATTACHMENT_BYTES
+            ):
+                raise MalformedItemError("Gmail attachment response is invalid")
+            data_by_attachment_id[attachment_id] = data
+        apply_external_part_data(
+            cast(dict[str, object], payload), data_by_attachment_id
+        )
+        return normalize_gmail_documents(hydrated)
 
     async def _request(
         self,

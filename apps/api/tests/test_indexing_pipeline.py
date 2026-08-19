@@ -60,6 +60,11 @@ def test_prepare_chunks_deduplicates_and_builds_finite_embeddings() -> None:
             math.sqrt(sum(value * value for value in chunk.embedding)), 1.0
         )
 
+    attachment = IndexingPipeline().prepare(
+        pending('{"attachment": "searchable"}', "application/json")
+    )
+    assert attachment.normalized_text == '{"attachment": "searchable"}'
+
 
 def test_prepare_is_deterministic_and_splits_large_blocks() -> None:
     document = pending(" ".join(f"word{index}" for index in range(1_700)))

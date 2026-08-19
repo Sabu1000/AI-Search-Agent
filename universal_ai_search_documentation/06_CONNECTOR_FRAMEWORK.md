@@ -2,8 +2,9 @@
 
 > **Implementation status:** The shared Connector SDK scope is implemented and
 > tested. The wider connector phase is partial (`7/11` master tasks). A real
-> read-only Gmail full and incremental-sync client with MIME-aware email parsing
-> exists; Drive, GitHub, and local-file provider clients remain. See
+> read-only Gmail full and incremental-sync client with MIME-aware email and
+> attachment extraction exists; Drive, GitHub, and local-file provider clients
+> remain. See
 > [`IMPLEMENTATION_STATUS.md`](IMPLEMENTATION_STATUS.md).
 
 ## Goals and ownership
@@ -59,6 +60,17 @@ message separators, quote-marked reply suffixes, and the conventional signature
 delimiter are removed; ambiguous text is retained. Parser decisions and skipped
 attachment counts are preserved as non-secret provider metadata for auditability.
 
+Filename or attachment-disposition MIME parts become separate `attachment`
+documents with the stable identity `<message-id>:attachment:<part-id>`. The
+client hydrates separately stored Gmail text bodies through the read-only
+attachment GET endpoint. It fetches at most 100 external text parts per message,
+caps each decoded part at 5 MB, and never fetches unsupported binary parts merely
+to construct an index record. Plain text, HTML, Markdown, CSV, JSON, XML, YAML,
+and other `text/*` attachments reuse the inert parser and remain linked to their
+parent message/thread. Unsupported or oversized parts produce bounded searchable
+descriptors with an explicit extraction status and original MIME type, ready for
+later binary parsers without changing source identity.
+
 The worker claims a Gmail job through an authoritative database function,
 decrypts credentials only in memory, refreshes and re-encrypts them when they
 are near expiry, and imports at most 25 message references per job. Each page
@@ -79,10 +91,10 @@ continuation boundary as full sync, and the new cursor is committed only on the
 last page. Gmail's expired-cursor `404` fails that incremental job with the
 sanitized `CURSOR_INVALID` code and schedules a controlled full recovery.
 
-This implements `P5-002` through `P5-005` and the immediate search-cutoff part
-of `P5-009`. Attachment extraction/content purge, complete metadata mapping,
-label selection UI, full-list absence reconciliation, and a live Google sandbox
-certification remain separate tasks.
+This implements `P5-002` through `P5-006` and the immediate search-cutoff part
+of `P5-009`. Binary PDF/Office content parsing, complete metadata mapping, content
+purge, label selection UI, full-list absence reconciliation, and a live Google
+sandbox certification remain separate tasks.
 
 ## Canonical providers and source identity
 

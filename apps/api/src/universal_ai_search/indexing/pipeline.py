@@ -19,6 +19,21 @@ _TOKEN_PATTERN = re.compile(r"\w+|[^\w\s]", re.UNICODE)
 _HEADING_PATTERN = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
 _SPACE_PATTERN = re.compile(r"[^\S\n]+")
 _BLANK_PATTERN = re.compile(r"\n{3,}")
+_NORMALIZED_TEXT_MEDIA_TYPES = frozenset(
+    {
+        "application/json",
+        "application/ld+json",
+        "application/toml",
+        "application/xml",
+        "application/x-httpd-php",
+        "application/x-ndjson",
+        "application/x-sh",
+        "application/x-yaml",
+        "application/yaml",
+        "text/markdown",
+        "text/plain",
+    }
+)
 
 
 class IndexingError(Exception):
@@ -218,7 +233,10 @@ def _merge(
 
 class IndexingPipeline:
     def prepare(self, pending: PendingDocument) -> PreparedDocument:
-        if pending.mime_type not in {"text/plain", "text/markdown"}:
+        if not (
+            pending.mime_type.startswith("text/")
+            or pending.mime_type in _NORMALIZED_TEXT_MEDIA_TYPES
+        ):
             raise IndexingError("UNSUPPORTED_MEDIA_TYPE")
         normalized = normalize_text(pending.content)
         if not normalized or not tokens(normalized):
