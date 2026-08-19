@@ -2,8 +2,8 @@
 
 > **Implementation status:** The shared Connector SDK scope is implemented and
 > tested. The wider connector phase is partial (`7/11` master tasks). A real
-> read-only Gmail full and incremental-sync client exists; Drive, GitHub, and
-> local-file provider clients remain. See
+> read-only Gmail full and incremental-sync client with MIME-aware email parsing
+> exists; Drive, GitHub, and local-file provider clients remain. See
 > [`IMPLEMENTATION_STATUS.md`](IMPLEMENTATION_STATUS.md).
 
 ## Goals and ownership
@@ -48,8 +48,16 @@ hidden by web or API success.
 The backend Gmail adapter uses only profile, message-list, and full-message GET
 operations plus the OAuth token refresh endpoint. It maps authentication,
 permission, rate-limit, outage, and malformed-response failures into the SDK's
-sanitized taxonomy. Plain text is preferred over HTML alternatives; HTML is
-reduced to inert text and attachment bodies are not fetched in this slice.
+sanitized taxonomy. Its deterministic MIME parser walks nested multipart trees,
+prefers plain text within alternatives, combines distinct inline body sections,
+and safely falls back to visible HTML. It decodes RFC 2047 headers and declared
+body character sets, normalizes Unicode, line endings, whitespace, and control
+characters, and applies a 5 MB extracted-body limit. Scripts, styles, hidden HTML,
+forwarded-message parts, and filename/disposition/attachment-ID bodies never enter
+the searchable text. Semantic HTML quote/signature containers, standard original
+message separators, quote-marked reply suffixes, and the conventional signature
+delimiter are removed; ambiguous text is retained. Parser decisions and skipped
+attachment counts are preserved as non-secret provider metadata for auditability.
 
 The worker claims a Gmail job through an authoritative database function,
 decrypts credentials only in memory, refreshes and re-encrypts them when they
@@ -71,10 +79,10 @@ continuation boundary as full sync, and the new cursor is committed only on the
 last page. Gmail's expired-cursor `404` fails that incremental job with the
 sanitized `CURSOR_INVALID` code and schedules a controlled full recovery.
 
-This implements `P5-002` through `P5-004` and the immediate search-cutoff part
-of `P5-009`. Attachment/content purge, advanced email parsing, label selection
-UI, full-list absence reconciliation, and a live Google sandbox certification
-remain separate tasks.
+This implements `P5-002` through `P5-005` and the immediate search-cutoff part
+of `P5-009`. Attachment extraction/content purge, complete metadata mapping,
+label selection UI, full-list absence reconciliation, and a live Google sandbox
+certification remain separate tasks.
 
 ## Canonical providers and source identity
 

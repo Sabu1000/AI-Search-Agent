@@ -64,6 +64,7 @@ def test_normalize_gmail_message_preserves_stable_searchable_fields() -> None:
     assert document.authors == ("owner@example.test",)
     assert document.created_at == datetime(2024, 1, 1, tzinfo=UTC)
     assert document.provider_metadata == {
+        "body_format": "plain",
         "history_id": "900",
         "label_ids": ["IMPORTANT", "INBOX"],
         "size_estimate": 512,

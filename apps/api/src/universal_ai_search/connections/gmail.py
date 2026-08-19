@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import base64
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from email.utils import parseaddr
-from html.parser import HTMLParser
 from typing import cast
 
 import httpx
@@ -22,6 +20,7 @@ from uas_connector_sdk.errors import (
     RateLimitError,
 )
 
+from .email_parser import decode_mime_header, parse_gmail_payload
 from .google import GMAIL_READONLY_SCOPE, GOOGLE_TOKEN_ENDPOINT
 
 GMAIL_API_ROOT = "https://gmail.googleapis.com/gmail/v1/users/me"
@@ -42,18 +41,6 @@ class GmailHistoryPage:
     deleted_external_ids: tuple[str, ...]
     history_id: str
     next_page_token: str | None
-
-
-class _TextExtractor(HTMLParser):
-    def __init__(self) -> None:
-        super().__init__(convert_charrefs=True)
-        self.parts: list[str] = []
-
-    def handle_data(self, data: str) -> None:
-        self.parts.append(data)
-
-    def text(self) -> str:
-        return " ".join(" ".join(self.parts).split())
 
 
 def _provider_error(response: httpx.Response) -> Exception:
@@ -83,42 +70,6 @@ def _json(response: httpx.Response) -> dict[str, object]:
     return cast(dict[str, object], payload)
 
 
-def _decode_body(value: object) -> str:
-    if not isinstance(value, str) or not value:
-        return ""
-    try:
-        padded = value + "=" * (-len(value) % 4)
-        return base64.urlsafe_b64decode(padded).decode("utf-8", errors="replace")
-    except (ValueError, TypeError) as error:
-        raise MalformedItemError("Gmail message body is invalid") from error
-
-
-def _body_text(part: dict[str, object]) -> str:
-    mime_type = part.get("mimeType")
-    body = part.get("body")
-    if mime_type == "text/plain" and isinstance(body, dict):
-        return _decode_body(body.get("data"))
-    parts = part.get("parts")
-    if isinstance(parts, list):
-        children = [child for child in parts if isinstance(child, dict)]
-        plain = "\n\n".join(
-            text
-            for child in children
-            if child.get("mimeType") != "text/html"
-            if (text := _body_text(child))
-        )
-        if plain:
-            return plain
-        html = "\n\n".join(text for child in children if (text := _body_text(child)))
-        if html:
-            return html
-    if mime_type == "text/html" and isinstance(body, dict):
-        extractor = _TextExtractor()
-        extractor.feed(_decode_body(body.get("data")))
-        return extractor.text()
-    return ""
-
-
 def _headers(payload: dict[str, object]) -> dict[str, str]:
     headers = payload.get("headers")
     if not isinstance(headers, list):
@@ -129,7 +80,7 @@ def _headers(payload: dict[str, object]) -> dict[str, str]:
             continue
         name, value = header.get("name"), header.get("value")
         if isinstance(name, str) and isinstance(value, str):
-            result.setdefault(name.casefold(), value.strip())
+            result.setdefault(name.casefold(), decode_mime_header(value))
     return result
 
 
@@ -157,7 +108,8 @@ def normalize_gmail_message(message: dict[str, object]) -> NormalizedDocument:
     subject = fields.get("subject") or "(no subject)"
     sender = fields.get("from", "")
     author = parseaddr(sender)[1] or sender
-    body = _body_text(cast(dict[str, object], payload)).strip()
+    parsed_body = parse_gmail_payload(cast(dict[str, object], payload))
+    body = parsed_body.text
     preamble = [
         f"Subject: {subject}",
         *((f"From: {sender}",) if sender else ()),
@@ -184,6 +136,14 @@ def normalize_gmail_message(message: dict[str, object]) -> NormalizedDocument:
         metadata["history_id"] = history_id
     if isinstance(size_estimate, int) and size_estimate >= 0:
         metadata["size_estimate"] = size_estimate
+    if parsed_body.body_format is not None:
+        metadata["body_format"] = parsed_body.body_format
+    if parsed_body.quoted_history_removed:
+        metadata["quoted_history_removed"] = True
+    if parsed_body.signature_removed:
+        metadata["signature_removed"] = True
+    if parsed_body.skipped_attachment_count:
+        metadata["skipped_attachment_count"] = parsed_body.skipped_attachment_count
 
     return NormalizedDocument(
         external_id=message_id,

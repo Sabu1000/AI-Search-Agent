@@ -20,15 +20,17 @@ separately so a validated design is never presented as working product code.
   search is complete for the local-index backend (`9/9`), and end-to-end MVP
   acceptance is `1/11`
 - Backfill status: `B0` through `B6` are complete; `B7` is active, with Google
-  authorization plus bounded Gmail full and incremental synchronization implemented
-- Next implementation slice: advanced Gmail email parsing (`P5-005`)
+  authorization plus bounded Gmail full/incremental synchronization and advanced
+  email parsing implemented
+- Next implementation slice: Gmail attachment extraction (`P5-006`)
 - Product status: tested project foundation, an implemented 33-table
   PostgreSQL schema with forced tenant RLS, an implemented Python connector
   SDK, a tested fail-closed API platform layer, and a working six-endpoint
   email/password authentication flow with a minimal web UI, durable indexing,
   tenant-safe hybrid search, Google OAuth connection authorization, and Gmail
-  full/incremental sync into the searchable index; Drive synchronization, provider UIs,
-  and the remaining 40 product endpoints remain to be built
+  full/incremental sync with safe MIME parsing into the searchable index; Drive
+  synchronization, provider UIs, and the remaining 40 product endpoints remain
+  to be built
 - Safety boundary: version 1 is read-only; retrieved content is untrusted data
   and cannot trigger actions
 
@@ -141,10 +143,12 @@ refreshes encrypted credentials when needed, imports the mailbox in bounded
 25-message pages, queues each normalized message for indexing, and commits the
 Gmail history cursor only after the final page. The worker then polls Gmail
 history in bounded pages, reindexes changed messages, tombstones deleted ones,
-and falls back to a controlled full sync if Gmail expires the cursor. Drive jobs
-remain pending until the Drive connector is implemented. There is not yet a
-connection UI, and the live Google sandbox smoke test still requires your own
-Google test project.
+and falls back to a controlled full sync if Gmail expires the cursor. MIME parsing
+prefers plain text, safely falls back to visible HTML, decodes declared character
+sets and encoded headers, skips attachment bodies, and removes quoted history or
+signatures only at high-confidence boundaries. Drive jobs remain pending until
+the Drive connector is implemented. There is not yet a connection UI, and the
+live Google sandbox smoke test still requires your own Google test project.
 
 ## Docker foundation
 

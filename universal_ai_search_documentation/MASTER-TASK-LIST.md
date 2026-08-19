@@ -154,7 +154,7 @@ Rules:
 - [x] P5-002 Gmail API client
 - [x] P5-003 Initial sync
 - [x] P5-004 Incremental sync
-- [ ] P5-005 Email parser
+- [x] P5-005 Email parser
 - [ ] P5-006 Attachment extraction
 - [ ] P5-007 Metadata extraction
 - [ ] P5-008 Normalization
