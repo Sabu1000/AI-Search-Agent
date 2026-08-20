@@ -61,8 +61,15 @@ class SearchRepository:
                 name = f"person_{index}"
                 parameters[name] = person.casefold()
                 people.append(
-                    f"position(:{name} in "
-                    "lower(coalesce(source.author_display, ''))) > 0"
+                    "(EXISTS (SELECT 1 FROM app.source_people AS source_person "
+                    "WHERE source_person.workspace_id = source.workspace_id "
+                    "AND source_person.source_id = source.id "
+                    f"AND (position(:{name} in lower("
+                    "source_person.normalized_identifier::TEXT)) > 0 "
+                    f"OR position(:{name} in lower(coalesce("
+                    "source_person.display_name, ''))) > 0)) "
+                    f"OR position(:{name} in "
+                    "lower(coalesce(source.author_display, ''))) > 0)"
                 )
             clauses.append("(" + " OR ".join(people) + ")")
         if filters.file_types:

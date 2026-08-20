@@ -96,6 +96,23 @@ class AccessMetadata(StrictModel):
     domain_ids: tuple[str, ...] = ()
 
 
+class DocumentPerson(StrictModel):
+    """A bounded provider identity used for deterministic source filtering."""
+
+    relationship: Literal["author", "sender", "recipient", "owner", "participant", "reviewer"]
+    identity_kind: Literal["email", "provider_user", "display_name"]
+    normalized_identifier: str = Field(min_length=1, max_length=512)
+    display_name: str | None = Field(default=None, max_length=500)
+
+    @field_validator("normalized_identifier")
+    @classmethod
+    def normalize_identifier(cls, value: str) -> str:
+        normalized = value.strip().casefold()
+        if not normalized:
+            raise ValueError("normalized_identifier must not be blank")
+        return normalized
+
+
 class NormalizedDocument(StrictModel):
     external_id: str = Field(min_length=1, max_length=512)
     provider: Provider
@@ -107,6 +124,7 @@ class NormalizedDocument(StrictModel):
     authors: tuple[str, ...] = ()
     created_at: datetime | None = None
     modified_at: datetime | None = None
+    people: tuple[DocumentPerson, ...] = ()
     access_metadata: AccessMetadata = Field(default_factory=AccessMetadata)
     provider_metadata: JsonObject = Field(default_factory=dict)
 
@@ -129,6 +147,12 @@ class NormalizedDocument(StrictModel):
             raise ValueError("modified_at cannot precede created_at")
         if len(canonical_json(self.provider_metadata).encode()) > 65_536:
             raise ValueError("provider_metadata exceeds 64 KiB")
+        identities = {
+            (person.relationship, person.identity_kind, person.normalized_identifier)
+            for person in self.people
+        }
+        if len(identities) != len(self.people):
+            raise ValueError("people must contain unique relationship identities")
         return self
 
     @property

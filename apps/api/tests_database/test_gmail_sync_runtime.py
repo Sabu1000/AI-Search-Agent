@@ -6,7 +6,7 @@ from uuid import UUID
 
 import psycopg
 from conftest import database_dsn
-from uas_connector_sdk import NormalizedDocument, Provider
+from uas_connector_sdk import DocumentPerson, NormalizedDocument, Provider
 
 from universal_ai_search.connections.crypto import (
     LocalEnvelopeEncryption,
@@ -15,7 +15,7 @@ from universal_ai_search.connections.crypto import (
 from universal_ai_search.connections.gmail import GmailHistoryPage, GmailPage
 from universal_ai_search.connections.google import GMAIL_READONLY_SCOPE
 from universal_ai_search.indexing.pipeline import IndexingPipeline
-from universal_ai_search.indexing.repository import IndexRepository
+from universal_ai_search.indexing.repository import EnqueueStatus, IndexRepository
 from universal_ai_search.indexing.runtime import IndexingRuntime
 from universal_ai_search.sync.repository import GoogleSyncRepository
 from universal_ai_search.sync.runtime import GmailSyncRuntime
@@ -57,6 +57,18 @@ class FakeGmailClient:
                     mime_type="text/plain",
                     authors=("sender@example.test",),
                     created_at=datetime(2026, 8, 15, tzinfo=UTC),
+                    people=(
+                        DocumentPerson(
+                            relationship="sender",
+                            identity_kind="email",
+                            normalized_identifier="sender@example.test",
+                        ),
+                        DocumentPerson(
+                            relationship="recipient",
+                            identity_kind="email",
+                            normalized_identifier="recipient@example.test",
+                        ),
+                    ),
                     provider_metadata={"thread_id": "thread-1"},
                 ),
             ),
@@ -81,6 +93,13 @@ class FakeGmailClient:
                     mime_type="text/plain",
                     authors=("sender@example.test",),
                     created_at=datetime(2026, 8, 15, tzinfo=UTC),
+                    people=(
+                        DocumentPerson(
+                            relationship="sender",
+                            identity_kind="email",
+                            normalized_identifier="sender@example.test",
+                        ),
+                    ),
                     provider_metadata={"thread_id": "thread-1"},
                 ),
             ),
@@ -238,6 +257,62 @@ def test_gmail_full_sync_queues_indexes_and_commits_cursor(
             ),
         ]
     )
+    assert connection.execute(
+        "SELECT relationship, normalized_identifier::TEXT "
+        "FROM app.source_people WHERE workspace_id = %s "
+        "ORDER BY relationship, normalized_identifier",
+        (WORKSPACE_ID,),
+    ).fetchall() == [
+        ("recipient", "recipient@example.test"),
+        ("recipient", "recipient@example.test"),
+        ("sender", "sender@example.test"),
+        ("sender", "sender@example.test"),
+    ]
+
+    metadata_only_update = NormalizedDocument(
+        external_id="gmail-message-1",
+        provider=Provider.GMAIL,
+        source_type="email",
+        title="Gmail integration test 1 metadata refreshed",
+        content=("Subject: Gmail integration test 1\n\nSearchable mailbox content 1."),
+        canonical_url=("https://mail.google.com/mail/u/0/#all/gmail-message-1"),
+        mime_type="text/plain",
+        authors=("sender@example.test",),
+        created_at=datetime(2026, 8, 15, tzinfo=UTC),
+        people=(
+            DocumentPerson(
+                relationship="sender",
+                identity_kind="email",
+                normalized_identifier="sender@example.test",
+            ),
+            DocumentPerson(
+                relationship="recipient",
+                identity_kind="email",
+                normalized_identifier="new-recipient@example.test",
+            ),
+        ),
+        provider_metadata={"label_ids": ["STARRED"], "thread_id": "thread-1"},
+    )
+    refresh = index_repository.enqueue(
+        WORKSPACE_ID, CONNECTION_ID, metadata_only_update
+    )
+    assert refresh.status is EnqueueStatus.UNCHANGED
+    assert connection.execute(
+        "SELECT title, metadata -> 'label_ids' FROM app.sources "
+        "WHERE connection_id = %s AND external_id = 'gmail-message-1'",
+        (CONNECTION_ID,),
+    ).fetchone() == (
+        "Gmail integration test 1 metadata refreshed",
+        ["STARRED"],
+    )
+    assert connection.execute(
+        "SELECT normalized_identifier::TEXT FROM app.source_people "
+        "WHERE source_id = %s ORDER BY normalized_identifier",
+        (refresh.source_id,),
+    ).fetchall() == [
+        ("new-recipient@example.test",),
+        ("sender@example.test",),
+    ]
 
     connection.execute(
         "UPDATE app.jobs SET available_at = clock_timestamp() "

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import cast
 
-from uas_connector_sdk import NormalizedDocument, Provider
+from uas_connector_sdk import DocumentPerson, NormalizedDocument, Provider
 from uas_connector_sdk.errors import MalformedItemError
 
 from .email_parser import decode_mime_header, parse_gmail_payload
@@ -40,6 +40,8 @@ class GmailAttachmentPart:
     attachment_id: str | None
     data: str | None
     content_type: str
+    content_disposition: str
+    content_id: str | None
 
 
 def is_textual_attachment(mime_type: str) -> bool:
@@ -100,6 +102,7 @@ def normalize_gmail_attachments(
     author: str,
     sent_at: datetime,
     payload: dict[str, object],
+    people: tuple[DocumentPerson, ...] = (),
 ) -> tuple[NormalizedDocument, ...]:
     """Create one stable normalized source for every Gmail attachment."""
 
@@ -136,8 +139,20 @@ def normalize_gmail_attachments(
                 mime_type=normalized_mime_type,
                 authors=(author[:500],) if author else (),
                 created_at=sent_at,
+                people=people,
                 provider_metadata={
+                    **(
+                        {"content_disposition": attachment.content_disposition}
+                        if attachment.content_disposition
+                        else {}
+                    ),
+                    **(
+                        {"content_id": attachment.content_id}
+                        if attachment.content_id
+                        else {}
+                    ),
                     "extraction_status": extraction_status,
+                    "filename": filename,
                     "original_mime_type": attachment.mime_type,
                     "parent_message_id": message_id,
                     "part_id": attachment.part_id,
@@ -191,6 +206,8 @@ def _walk_parts(part: dict[str, object], result: list[GmailAttachmentPart]) -> N
                 attachment_id=attachment_id,
                 data=data,
                 content_type=headers.get("content-type", ""),
+                content_disposition=headers.get("content-disposition", "")[:500],
+                content_id=(headers.get("content-id", "")[:512] or None),
             )
         )
     _walk_children(part, lambda child: _walk_parts(child, result))

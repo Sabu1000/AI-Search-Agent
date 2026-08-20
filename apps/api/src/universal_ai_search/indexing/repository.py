@@ -127,19 +127,6 @@ class IndexRepository:
             )
             version_id = document_version_id(source_id, key)
 
-            current = connection.execute(
-                "SELECT version.id FROM app.sources AS source "
-                "JOIN app.document_versions AS version "
-                "ON version.id = source.current_document_version_id "
-                "WHERE source.id = %s AND version.version_key = %s "
-                "AND version.state = 'ready'",
-                (source_id, key),
-            ).fetchone()
-            if current is not None:
-                return EnqueueResult(
-                    EnqueueStatus.UNCHANGED, source_id, current["id"], None
-                )
-
             timestamp = document.modified_at or document.created_at
             timestamp_kind = (
                 "modified"
@@ -150,7 +137,12 @@ class IndexRepository:
                     else "created" if timestamp else None
                 )
             )
-            extension = PurePosixPath(document.external_id).suffix.lstrip(".") or None
+            extension_source = (
+                document.title
+                if document.source_type in {"attachment", "file"}
+                else document.external_id
+            )
+            extension = PurePosixPath(extension_source).suffix.lstrip(".")[:50] or None
             authors = ", ".join(document.authors)[:500] or None
             connection.execute(
                 """INSERT INTO app.sources (
@@ -193,6 +185,58 @@ class IndexRepository:
                     json.dumps(document.provider_metadata),
                 ),
             )
+            connection.execute(
+                "DELETE FROM app.source_people WHERE workspace_id = %s "
+                "AND source_id = %s",
+                (workspace_id, source_id),
+            )
+            for person in sorted(
+                document.people,
+                key=lambda item: (
+                    item.relationship,
+                    item.identity_kind,
+                    item.normalized_identifier,
+                ),
+            ):
+                person_id = uuid5(
+                    source_id,
+                    ":".join(
+                        (
+                            person.relationship,
+                            person.identity_kind,
+                            person.normalized_identifier,
+                        )
+                    ),
+                )
+                connection.execute(
+                    """INSERT INTO app.source_people (
+                        id, workspace_id, source_id, relationship, identity_kind,
+                        normalized_identifier, display_name
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                    (
+                        person_id,
+                        workspace_id,
+                        source_id,
+                        person.relationship,
+                        person.identity_kind,
+                        person.normalized_identifier,
+                        person.display_name,
+                    ),
+                )
+
+            current = connection.execute(
+                "SELECT version.id FROM app.sources AS source "
+                "JOIN app.document_versions AS version "
+                "ON version.id = source.current_document_version_id "
+                "WHERE source.id = %s AND version.version_key = %s "
+                "AND version.state = 'ready'",
+                (source_id, key),
+            ).fetchone()
+            if current is not None:
+                return EnqueueResult(
+                    EnqueueStatus.UNCHANGED, source_id, current["id"], None
+                )
+
             connection.execute(
                 """INSERT INTO app.document_versions (
                     id, workspace_id, source_id, version_key, state,

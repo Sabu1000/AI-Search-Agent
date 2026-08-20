@@ -71,6 +71,14 @@ parent message/thread. Unsupported or oversized parts produce bounded searchable
 descriptors with an explicit extraction status and original MIME type, ready for
 later binary parsers without changing source identity.
 
+Gmail metadata extraction decodes and bounds an explicit RFC header allowlist.
+It records internal and RFC dates, labels, thread/history/message relationships,
+attachment counts and details, and structured sender, recipient, Bcc, and
+Reply-To identities. Provider identities are normalized into the shared
+`DocumentPerson` contract and persisted in `source_people`, so person filters do
+not depend on a flattened author string. An unchanged content version still
+refreshes mutable source metadata and its complete people set atomically.
+
 The worker claims a Gmail job through an authoritative database function,
 decrypts credentials only in memory, refreshes and re-encrypts them when they
 are near expiry, and imports at most 25 message references per job. Each page
@@ -91,8 +99,8 @@ continuation boundary as full sync, and the new cursor is committed only on the
 last page. Gmail's expired-cursor `404` fails that incremental job with the
 sanitized `CURSOR_INVALID` code and schedules a controlled full recovery.
 
-This implements `P5-002` through `P5-006` and the immediate search-cutoff part
-of `P5-009`. Binary PDF/Office content parsing, complete metadata mapping, content
+This implements `P5-002` through `P5-007` and the immediate search-cutoff part
+of `P5-009`. Binary PDF/Office content parsing, normalization certification, content
 purge, label selection UI, full-list absence reconciliation, and a live Google
 sandbox certification remain separate tasks.
 

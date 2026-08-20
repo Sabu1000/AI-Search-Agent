@@ -6,7 +6,6 @@ from contextlib import suppress
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from email.utils import parseaddr
 from typing import cast
 from urllib.parse import quote
 
@@ -22,13 +21,15 @@ from uas_connector_sdk.errors import (
     RateLimitError,
 )
 
-from .email_parser import decode_mime_header, parse_gmail_payload
+from .email_parser import parse_gmail_payload
 from .gmail_attachments import (
     MAX_ATTACHMENT_BYTES,
     apply_external_part_data,
     external_text_part_ids,
+    find_gmail_attachments,
     normalize_gmail_attachments,
 )
+from .gmail_metadata import extract_gmail_metadata
 from .google import GMAIL_READONLY_SCOPE, GOOGLE_TOKEN_ENDPOINT
 
 GMAIL_API_ROOT = "https://gmail.googleapis.com/gmail/v1/users/me"
@@ -78,20 +79,6 @@ def _json(response: httpx.Response) -> dict[str, object]:
     return cast(dict[str, object], payload)
 
 
-def _headers(payload: dict[str, object]) -> dict[str, str]:
-    headers = payload.get("headers")
-    if not isinstance(headers, list):
-        return {}
-    result: dict[str, str] = {}
-    for header in headers:
-        if not isinstance(header, dict):
-            continue
-        name, value = header.get("name"), header.get("value")
-        if isinstance(name, str) and isinstance(value, str):
-            result.setdefault(name.casefold(), decode_mime_header(value))
-    return result
-
-
 def normalize_gmail_message(message: dict[str, object]) -> NormalizedDocument:
     """Convert a Gmail full-format message without executing embedded content."""
 
@@ -112,18 +99,28 @@ def normalize_gmail_message(message: dict[str, object]) -> NormalizedDocument:
     except (ValueError, OverflowError) as error:
         raise MalformedItemError("Gmail message timestamp is invalid") from error
 
-    fields = _headers(cast(dict[str, object], payload))
-    subject = fields.get("subject") or "(no subject)"
-    sender = fields.get("from", "")
-    author = parseaddr(sender)[1] or sender
-    parsed_body = parse_gmail_payload(cast(dict[str, object], payload))
+    typed_payload = cast(dict[str, object], payload)
+    attachment_count = len(find_gmail_attachments(typed_payload))
+    parsed_metadata = extract_gmail_metadata(
+        typed_payload, sent_at=sent_at, attachment_count=attachment_count
+    )
+    subject = parsed_metadata.subject
+    parsed_body = parse_gmail_payload(typed_payload)
     body = parsed_body.text
     preamble = [
         f"Subject: {subject}",
-        *((f"From: {sender}",) if sender else ()),
-        *((f"To: {fields['to']}",) if fields.get("to") else ()),
-        *((f"Cc: {fields['cc']}",) if fields.get("cc") else ()),
-        *((f"Date: {fields['date']}",) if fields.get("date") else ()),
+        *(
+            (f"From: {parsed_metadata.sender_header}",)
+            if parsed_metadata.sender_header
+            else ()
+        ),
+        *((f"To: {parsed_metadata.to_header}",) if parsed_metadata.to_header else ()),
+        *((f"Cc: {parsed_metadata.cc_header}",) if parsed_metadata.cc_header else ()),
+        *(
+            (f"Date: {parsed_metadata.date_header}",)
+            if parsed_metadata.date_header
+            else ()
+        ),
     ]
     content = "\n".join(preamble) + (f"\n\n{body}" if body else "")
     if len(content) > 5_000_000:
@@ -139,6 +136,7 @@ def normalize_gmail_message(message: dict[str, object]) -> NormalizedDocument:
     metadata: dict[str, object] = {
         "thread_id": thread_id,
         "label_ids": sorted(label_ids),
+        **parsed_metadata.provider_metadata,
     }
     if isinstance(history_id, str):
         metadata["history_id"] = history_id
@@ -161,8 +159,9 @@ def normalize_gmail_message(message: dict[str, object]) -> NormalizedDocument:
         content=content,
         canonical_url=f"https://mail.google.com/mail/u/0/#all/{message_id}",
         mime_type="text/plain",
-        authors=(author[:500],) if author else (),
+        authors=tuple(author[:500] for author in parsed_metadata.authors),
         created_at=sent_at,
+        people=parsed_metadata.people,
         provider_metadata=metadata,
     )
 
@@ -177,19 +176,17 @@ def normalize_gmail_documents(
     thread_id = message.get("threadId")
     if not isinstance(payload, dict) or not isinstance(thread_id, str):
         raise MalformedItemError("Gmail message is missing required fields")
-    fields = _headers(cast(dict[str, object], payload))
-    sender = fields.get("from", "")
-    author = parseaddr(sender)[1] or sender
     if document.created_at is None:
         raise MalformedItemError("Gmail message timestamp is invalid")
     attachments = normalize_gmail_attachments(
         message_id=document.external_id,
         thread_id=thread_id,
         subject=document.title,
-        sender=sender,
-        author=author,
+        sender=document.authors[0] if document.authors else "",
+        author=document.authors[0] if document.authors else "",
         sent_at=document.created_at,
         payload=cast(dict[str, object], payload),
+        people=document.people,
     )
     return (document, *attachments)
 

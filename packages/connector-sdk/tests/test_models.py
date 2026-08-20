@@ -8,6 +8,7 @@ from uas_connector_sdk import (
     AccessMetadata,
     Credentials,
     CursorAdvanced,
+    DocumentPerson,
     NormalizedDocument,
     Provider,
     SyncContext,
@@ -29,6 +30,14 @@ def document(**overrides: object) -> NormalizedDocument:
         "mime_type": "text/plain",
         "created_at": datetime(2026, 1, 1, tzinfo=UTC),
         "modified_at": datetime(2026, 1, 2, tzinfo=UTC),
+        "people": (
+            DocumentPerson(
+                relationship="owner",
+                identity_kind="email",
+                normalized_identifier=" Owner@Example.Test ",
+                display_name="Owner",
+            ),
+        ),
         "access_metadata": AccessMetadata(user_ids=("u1",)),
         "provider_metadata": {"z": 2, "a": 1},
     }
@@ -51,6 +60,7 @@ def test_document_hashes_content_and_permissions() -> None:
     item = document()
     assert item.content_hash == stable_hash("A search plan")
     assert item.permissions_hash == stable_hash(item.access_metadata.model_dump(mode="json"))
+    assert item.people[0].normalized_identifier == "owner@example.test"
 
 
 @pytest.mark.parametrize(
@@ -76,6 +86,13 @@ def test_document_rejects_invalid_dates_and_large_metadata() -> None:
         document(provider_metadata={"value": {1, 2}})
     with pytest.raises(ValidationError, match="timezone-aware UTC"):
         document(created_at=datetime(2026, 1, 1))
+    duplicate = DocumentPerson(
+        relationship="sender",
+        identity_kind="email",
+        normalized_identifier="same@example.test",
+    )
+    with pytest.raises(ValidationError, match="unique relationship"):
+        document(people=(duplicate, duplicate))
     non_utc = timezone(timedelta(hours=-6))
     with pytest.raises(ValidationError, match="timezone-aware UTC"):
         document(created_at=datetime(2026, 1, 1, tzinfo=non_utc))

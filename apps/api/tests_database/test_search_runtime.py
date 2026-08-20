@@ -7,7 +7,7 @@ import pytest
 from conftest import database_dsn
 from sqlalchemy.ext.asyncio import create_async_engine
 from test_indexing_runtime import CONNECTION_ID, USER_ID, WORKSPACE_ID, seed_workspace
-from uas_connector_sdk import RawItem
+from uas_connector_sdk import DocumentPerson, RawItem
 from uas_connector_sdk.testing import FakeConnector
 
 from universal_ai_search.indexing.pipeline import IndexingPipeline
@@ -33,6 +33,18 @@ async def _indexed_document(
                 ),
             },
         )
+    )
+    document = document.model_copy(
+        update={
+            "people": (
+                DocumentPerson(
+                    relationship="author",
+                    identity_kind="email",
+                    normalized_identifier="maya@example.test",
+                    display_name="Maya Chen",
+                ),
+            )
+        }
     )
     repository = IndexRepository(database_dsn())
     repository.enqueue(WORKSPACE_ID, CONNECTION_ID, document)
@@ -97,6 +109,28 @@ async def test_search_filters_and_rls_fail_closed(
                 20,
             ),
         )
+        filtered_by_person = await service.search(
+            workspace_id=WORKSPACE_ID,
+            user_id=USER_ID,
+            authorization_version=1,
+            search=SearchInput(
+                "payment retries",
+                "results",
+                SearchFilters(people=("maya chen",)),
+                20,
+            ),
+        )
+        missing_person = await service.search(
+            workspace_id=WORKSPACE_ID,
+            user_id=USER_ID,
+            authorization_version=1,
+            search=SearchInput(
+                "payment retries",
+                "results",
+                SearchFilters(people=("nobody@example.test",)),
+                20,
+            ),
+        )
         with pytest.raises(RuntimeError, match="workspace disappeared"):
             await service.search(
                 workspace_id=uuid4(),
@@ -115,3 +149,5 @@ async def test_search_filters_and_rls_fail_closed(
         await engine.dispose()
 
     assert filtered.ranked == ()
+    assert filtered_by_person.ranked
+    assert missing_person.ranked == ()

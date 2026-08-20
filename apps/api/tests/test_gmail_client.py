@@ -66,9 +66,13 @@ def test_normalize_gmail_message_preserves_stable_searchable_fields() -> None:
     assert document.authors == ("owner@example.test",)
     assert document.created_at == datetime(2024, 1, 1, tzinfo=UTC)
     assert document.provider_metadata == {
+        "attachment_count": 0,
         "body_format": "plain",
         "history_id": "900",
+        "internal_date": "2024-01-01T00:00:00Z",
         "label_ids": ["IMPORTANT", "INBOX"],
+        "recipients": {"to": [{"address": "team@example.test"}]},
+        "sender": [{"address": "owner@example.test", "display_name": "Owner"}],
         "size_estimate": 512,
         "thread_id": "thread-1",
     }
@@ -209,6 +213,68 @@ def test_attachment_normalization_rejects_duplicate_part_identity() -> None:
 
     with pytest.raises(MalformedItemError):
         normalize_gmail_documents(message)
+
+
+def test_normalization_preserves_structured_people_and_message_relationships() -> None:
+    message = message_payload("Metadata body")
+    payload = message["payload"]
+    assert isinstance(payload, dict)
+    headers = payload["headers"]
+    assert isinstance(headers, list)
+    headers.extend(
+        [
+            {"name": "To", "value": "Second <SECOND@example.test>"},
+            {"name": "Cc", "value": "Carbon <cc@example.test>"},
+            {"name": "Bcc", "value": "Hidden <bcc@example.test>"},
+            {"name": "Reply-To", "value": "Support <reply@example.test>"},
+            {"name": "Date", "value": "Mon, 1 Jan 2024 00:00:00 +0000"},
+            {"name": "Message-ID", "value": "<message@example.test>"},
+            {"name": "In-Reply-To", "value": "<parent@example.test>"},
+            {
+                "name": "References",
+                "value": "<root@example.test> <parent@example.test>",
+            },
+        ]
+    )
+    payload["mimeType"] = "multipart/mixed"
+    parts = payload["parts"]
+    assert isinstance(parts, list)
+    parts.append(
+        {
+            "partId": "9",
+            "filename": "photo.png",
+            "mimeType": "image/png",
+            "headers": [
+                {"name": "Content-ID", "value": "<inline-photo>"},
+                {"name": "Content-Disposition", "value": "inline"},
+            ],
+            "body": {"attachmentId": "photo-data", "size": 700},
+        }
+    )
+
+    email, attachment = normalize_gmail_documents(message)
+
+    assert {
+        (person.relationship, person.normalized_identifier) for person in email.people
+    } == {
+        ("sender", "owner@example.test"),
+        ("recipient", "team@example.test"),
+        ("recipient", "second@example.test"),
+        ("recipient", "cc@example.test"),
+        ("recipient", "bcc@example.test"),
+        ("participant", "reply@example.test"),
+    }
+    assert email.provider_metadata["rfc_message_id"] == "<message@example.test>"
+    assert email.provider_metadata["in_reply_to"] == "<parent@example.test>"
+    assert email.provider_metadata["references"] == [
+        "<root@example.test>",
+        "<parent@example.test>",
+    ]
+    assert email.provider_metadata["attachment_count"] == 1
+    assert attachment.people == email.people
+    assert attachment.provider_metadata["filename"] == "photo.png"
+    assert attachment.provider_metadata["content_id"] == "<inline-photo>"
+    assert attachment.provider_metadata["content_disposition"] == "inline"
 
 
 @pytest.mark.asyncio

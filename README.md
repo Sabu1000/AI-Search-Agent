@@ -21,15 +21,16 @@ separately so a validated design is never presented as working product code.
   acceptance is `1/11`
 - Backfill status: `B0` through `B6` are complete; `B7` is active, with Google
   authorization plus bounded Gmail full/incremental synchronization and advanced
-  email parsing and attachment extraction implemented
-- Next implementation slice: Gmail metadata extraction (`P5-007`)
+  email parsing, attachment extraction, and structured metadata implemented
+- Next implementation slice: Gmail normalization certification (`P5-008`)
 - Product status: tested project foundation, an implemented 33-table
   PostgreSQL schema with forced tenant RLS, an implemented Python connector
   SDK, a tested fail-closed API platform layer, and a working six-endpoint
   email/password authentication flow with a minimal web UI, durable indexing,
   tenant-safe hybrid search, Google OAuth connection authorization, and Gmail
-  full/incremental sync with safe MIME parsing and stable attachment sources in
-  the searchable index; Drive synchronization, provider UIs, and the remaining
+  full/incremental sync with safe MIME parsing, stable attachment sources, and
+  searchable sender/recipient metadata in the index; Drive synchronization,
+  provider UIs, and the remaining
   40 product endpoints remain to be built
 - Safety boundary: version 1 is read-only; retrieved content is untrusted data
   and cannot trigger actions
@@ -149,7 +150,10 @@ sets and encoded headers, skips attachment bodies, and removes quoted history or
 signatures only at high-confidence boundaries. Attachments are separate stable
 sources: bounded textual parts are fetched and indexed, while unsupported binary
 or oversized parts retain a searchable descriptor and extraction status without
-downloading unsafe content. Drive jobs remain pending until the Drive connector
+downloading unsafe content. Allowlisted RFC message relationships, dates,
+labels, attachment details, and bounded sender/recipient identities are stored
+as structured metadata. Person filters use those identities, and metadata can
+refresh without creating a duplicate content version. Drive jobs remain pending until the Drive connector
 is implemented. There is not yet a connection UI, and the live Google sandbox
 smoke test still requires your own Google test project.
 

@@ -156,7 +156,7 @@ Rules:
 - [x] P5-004 Incremental sync
 - [x] P5-005 Email parser
 - [x] P5-006 Attachment extraction
-- [ ] P5-007 Metadata extraction
+- [x] P5-007 Metadata extraction
 - [ ] P5-008 Normalization
 - [ ] P5-009 Delete handling
 - [ ] P5-010 Error recovery
