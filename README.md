@@ -23,7 +23,7 @@ separately so a validated design is never presented as working product code.
   authorization plus bounded Gmail full/incremental synchronization and advanced
   email parsing, attachment extraction, normalization, deletion reconciliation,
   and error recovery implemented
-- Next implementation slice: bounded Google Drive folder sync (`P6-003`)
+- Next implementation slice: Google Drive PDF extraction (`P6-004`)
 - Product status: tested project foundation, an implemented 33-table
   PostgreSQL schema with forced tenant RLS, an implemented Python connector
   SDK, a tested fail-closed API platform layer, and a working six-endpoint
@@ -32,7 +32,8 @@ separately so a validated design is never presented as working product code.
   full/incremental sync with safe MIME parsing, stable attachment sources, and
   searchable sender/recipient metadata in the index. Completed Gmail scans now
   reconcile provider absences, deletions purge derived index data, and transient
-  failures use bounded durable retries; Drive synchronization,
+  failures use bounded durable retries. Google Drive now traverses selected
+  folder trees and indexes stable searchable file descriptors; Drive content parsing,
   provider UIs, and the remaining
   40 product endpoints remain to be built
 - Safety boundary: version 1 is read-only; retrieved content is untrusted data
@@ -161,8 +162,11 @@ or oversized parts retain a searchable descriptor and extraction status without
 downloading unsafe content. Allowlisted RFC message relationships, dates,
 labels, attachment details, and bounded sender/recipient identities are stored
 as structured metadata. Person filters use those identities, and metadata can
-refresh without creating a duplicate content version. Drive jobs remain pending until the Drive connector
-is implemented. There is not yet a connection UI, and the live Google sandbox
+refresh without creating a duplicate content version. Drive jobs now traverse one
+bounded folder page at a time, keep folder/page state encrypted, index stable file
+descriptors with logical paths and owners, and never follow shortcuts outside the
+selected tree. PDF and native document content extraction are the next Drive
+steps. There is not yet a connection UI, and the live Google sandbox
 smoke test still requires your own Google test project.
 
 ## Docker foundation

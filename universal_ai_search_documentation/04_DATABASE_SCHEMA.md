@@ -2,7 +2,7 @@
 
 > **Implementation status:** Specification complete; `33/33` specified tables
 > are created by Alembic revision `0001_initial_schema`; additive revisions
-> through `0006_gmail_reconciliation` provide the current authentication,
+> through `0007_drive_sync_runtime` provide the current authentication,
 > indexing, search, and Gmail runtime. Constraints, workload indexes, forced RLS, and
 > PostgreSQL integration tests are active. Non-authentication repository and
 > product-service code remains future work. See

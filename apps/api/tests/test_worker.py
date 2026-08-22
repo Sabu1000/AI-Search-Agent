@@ -28,10 +28,15 @@ def test_worker_consumes_one_job() -> None:
             "universal_ai_search.worker.main.IndexingRuntime.run_once",
             return_value=False,
         ) as run_once,
+        patch(
+            "universal_ai_search.worker.main.DriveSyncRuntime.run_once",
+            return_value=False,
+        ) as drive_once,
     ):
         assert main(["--once"]) == 0
 
     sync_once.assert_called_once()
+    drive_once.assert_called_once()
     run_once.assert_called_once()
 
 

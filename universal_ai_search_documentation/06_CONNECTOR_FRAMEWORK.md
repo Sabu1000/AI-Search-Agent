@@ -4,8 +4,8 @@
 > tested. The wider connector phase is partial (`7/11` master tasks). The Gmail
 > phase is complete (`11/11`) for the tested all-mail backend scope, including
 > normalization, reconciliation, derived-data deletion, and bounded recovery;
-> The bounded read-only Drive listing client is implemented; Drive folder
-> orchestration and content formats, GitHub, and local-file providers remain. See
+> Bounded read-only Drive folder traversal is implemented; Drive content formats,
+> GitHub, and local-file providers remain. See
 > [`IMPLEMENTATION_STATUS.md`](IMPLEMENTATION_STATUS.md).
 
 ## Goals and ownership
@@ -315,8 +315,15 @@ folder per request, supports shared-drive corpora, requests an explicit field
 projection, and rejects malformed, oversized, or duplicate provider pages. It
 normalizes stable file IDs, names, owners, parents, modified time, MIME type,
 size, safe Google links, and shortcut targets. File descriptors are inert and
-shortcuts are represented without following their targets. Durable folder-tree
-orchestration is the next Drive task.
+shortcuts are represented without following their targets.
+
+The Drive worker traverses a selected root (My Drive by default) through durable
+folder and page jobs. It indexes non-folder descriptors, schedules discovered
+folders by stable ID, and never follows shortcuts. Folder IDs, logical paths,
+shared-drive IDs, and opaque page tokens are envelope-encrypted in job progress;
+only a random sync-run UUID is visible for completion accounting. Each page is
+atomically handed to indexing before its job completes, and the connection is
+marked successful only after no discovered folder/page job remains.
 
 ### GitHub
 

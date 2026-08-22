@@ -2,8 +2,8 @@
 
 **Last audited:** 2026-08-19
 
-**Audited baseline:** `2a5df2c`; this ledger includes the current Gmail phase-
-completion checkpoint within `B7`.
+**Audited baseline:** `a3a0efa`; this ledger includes the current Drive folder-
+sync checkpoint within `B7`.
 
 **Purpose:** Separate validated design specifications from working product
 features and keep an evidence-based record of the next implementation step.
@@ -30,9 +30,9 @@ shells are never counted as finished user features.
 | `01_PROJECT_SPEC.md` | Complete | MVP partial (`1/11`) | `AUTH-001` passes end to end; the other 10 MVP requirements remain partial or not started. See the requirement audit below. |
 | `02_SYSTEM_ARCHITECTURE.md` | Complete | Partial | Process shells, local dependencies, schema migration ordering, revision-aware API readiness, a fail-closed HTTP boundary, database-backed authentication/authorization, durable Gmail/index workers, and hybrid search exist. Drive/GitHub/desktop orchestration, model streaming, and remaining product services do not. |
 | `03_SEARCH_ENGINE_DESIGN.md` | Complete | Local-index backend implemented; product phase partial | Exact/title, PostgreSQL FTS, pgvector, and trigram lanes run inside API-role RLS; typed filters, weighted RRF, deterministic reranking/deduplication, bounded context, extractive claims/citations, history persistence, safe empty answers, and `/v1/search` pass unit and live PostgreSQL tests. Production semantic/model adapters, relevance evaluation corpus, conflict evaluator, cache, and UI remain. |
-| `04_DATABASE_SCHEMA.md` | Complete | Database runtime implemented; phase partial | Alembic creates `33/33` specified tables, authoritative index/Gmail claim functions, constraints, indexes, roles, grants, and forced RLS. Compose migrates before API startup; readiness checks revision `0006_gmail_reconciliation`; 19 PostgreSQL integration tests cover auth, Google authorization, Gmail full/incremental synchronization and reconciliation, indexing/search, catalog, lifecycle, and tenant isolation. Seed data, backup automation, and the Phase 3 review remain. |
+| `04_DATABASE_SCHEMA.md` | Complete | Database runtime implemented; phase partial | Alembic creates `33/33` specified tables, authoritative index/Gmail/Drive claim functions, constraints, indexes, roles, grants, and forced RLS. Compose migrates before API startup; readiness checks revision `0007_drive_sync_runtime`; 20 PostgreSQL integration tests cover auth, Google authorization, Gmail sync/reconciliation, Drive folder traversal, indexing/search, catalog, lifecycle, and tenant isolation. Seed data, backup automation, and the Phase 3 review remain. |
 | `05_API_SPECIFICATION.md` | Complete | API platform, auth, search, and Google authorization implemented; product API partial | FastAPI has the OpenAPI 3.1 `/v1` boundary, request IDs, strict serialization, RFC 9457 problems, signed cursors, idempotency primitives, and working authentication/workspace backends. `9/49` catalogued product endpoints exist; rate limiting, SSE, remaining repositories, and other feature services remain. |
-| `06_CONNECTOR_FRAMEWORK.md` | Complete | SDK, OAuth, Gmail backend phase, and Drive API client implemented; provider ecosystem partial | The typed SDK, runtime validation, OAuth and credential storage, complete tested Gmail backend, and a bounded read-only Drive folder-listing client are implemented. The Drive client validates stable metadata, owners, shared-drive parameters, safe links, shortcuts, pagination, credential refresh, and provider failures. Drive orchestration and formats, GitHub, local files, general scheduling, logging, and metrics remain. |
+| `06_CONNECTOR_FRAMEWORK.md` | Complete | SDK, OAuth, Gmail backend phase, and Drive folder traversal implemented; provider ecosystem partial | The complete tested Gmail backend and bounded read-only Drive traversal are implemented. Drive uses durable folder/page jobs, encrypted traversal progress, stable metadata/owners/paths, shared-drive parameters, shortcut non-traversal, and whole-tree completion accounting. Drive formats, GitHub, local files, general scheduling, logging, and metrics remain. |
 | `07_INDEXING_PIPELINE.md` | Complete | Normalized text/Markdown path implemented | Deterministic normalization, language selection, structural chunking, exact/near deduplication, local 1,536-dimensional embeddings, durable PostgreSQL leasing, atomic promotion, unchanged skips, and re-index supersession pass unit and PostgreSQL/pgvector tests. Provider-specific binary parsers and production embedding providers remain later integrations. |
 | `08_SECURITY_AND_PRIVACY.md` | Complete | Partial controls | The threat model, data classification, tenant/cryptographic boundaries, browser/input/model defenses, audit/redaction policy, deletion/backup rules, and security release gates are implementation-ready. Existing RLS, strict API boundaries, secret validation, and containerized tests implement only part of the required controls. |
 | `09_AUTH_AND_OAUTH.md` | Complete | Authentication, Google connection authorization, and worker refresh implemented; remaining provider/recovery work partial | Existing password/session behavior includes single-use Google callbacks, PKCE S256, exact read-only scopes, envelope-encrypted credentials, per-family jobs, in-memory worker decryption, and re-encryption after access-token refresh. Password recovery, reauthentication, Google login, GitHub authorization, revocation, key rotation/KMS integration, abuse throttling, and the full security review remain. |
@@ -40,8 +40,8 @@ shells are never counted as finished user features.
 The active implementation slice is provider and desktop integration through
 backfill `B7`. The tested Gmail backend phase is complete, including Google
 authorization, full/incremental sync, extraction, normalization, reconciliation,
-derived-data deletion, and error recovery. The Drive API client is complete;
-bounded folder traversal is next.
+derived-data deletion, and error recovery. Bounded Drive folder traversal is
+complete; PDF extraction is next.
 
 ## MVP requirement audit
 
@@ -49,10 +49,10 @@ bounded folder traversal is next.
 | --- | --- | --- | --- |
 | `AUTH-001` | Implemented | A visitor can register, receive and submit a single-use email proof, receive an owner workspace, log in, inspect memberships, rotate a session, log out, and sign back in through the minimal web UI and six `/v1/auth` endpoints. Argon2id, generic failures, signed 15-minute JWT access tokens, hashed opaque refresh/CSRF tokens, exact-origin CSRF checks, non-superuser RLS, route/unit/database tests, and the Docker smoke test cover the acceptance path. | No missing MVP acceptance path. Password recovery, OAuth login, rate limiting, reauthentication, and the complete Phase 2 security review are later hardening/expansion tasks. |
 | `DESKTOP-001` | Partial | Tauri React/Rust shell compiles and is container-checked. | Signed installers, folder selection, root authorization, scanner/watcher, device registration, offline queue, removal/deletion flow, and platform tests. |
-| `GOOGLE-001` | Partial | The Google authorization endpoints implement workspace/session binding, PKCE S256, exact Gmail/Drive read-only scopes, encrypted credentials, and per-family jobs. The Gmail backend phase is complete. The Drive client performs bounded selected-folder listings, shared-drive queries, strict metadata/owner/shortcut normalization, safe-link validation, scoped token refresh, and sanitized provider failure classification. | Drive folder orchestration and content parsers, selection/connection/search UI, and a live Google sandbox smoke test. |
+| `GOOGLE-001` | Partial | The Google authorization endpoints implement workspace/session binding, PKCE S256, exact Gmail/Drive read-only scopes, encrypted credentials, and per-family jobs. The Gmail backend phase is complete. Drive traverses a selected root through bounded durable folder/page jobs, encrypts traversal progress, indexes stable file descriptors with paths and owners, supports shared-drive queries, and does not follow shortcuts. | Drive content parsers, selection/connection/search UI, incremental Drive changes/deletion, and a live Google sandbox smoke test. |
 | `GITHUB-001` | Not started | Canonical SDK provider contract only. | GitHub App, installation/repository selection, API client, webhooks, reconciliation, access removal, UI, and provider contract tests. |
-| `SYNC-001` | Partial | SDK defines deterministic changes; authoritative PostgreSQL leases drive indexing and Gmail full/history sync; Gmail uses one bounded page per durable job, idempotent indexing handoffs, authoritative full-scan markers, parent/attachment derived-data purge, bounded retry/dead-letter classification, expired-cursor recovery, and a terminal durable history cursor. | Generalized provider scheduling/orchestration, status APIs/UI, wider cross-provider replay tests, and operational metrics. |
-| `SEARCH-001` | Partial | Authorized exact, FTS, vector, and trigram retrieval, typed provider/person/date/repository/folder/source/file filters, fusion, ranking, safe empty results, history, and API/database isolation tests work against indexed content; the PostgreSQL suite now proves Gmail-normalized content reaches that index. | Live-provider certification, UI result/filter states, production semantic embeddings, and a labeled retrieval evaluation corpus. |
+| `SYNC-001` | Partial | SDK defines deterministic changes; authoritative PostgreSQL leases drive indexing, Gmail sync, and Drive folder traversal. Gmail provides complete tested full/history behavior; Drive uses one bounded page per job, encrypted folder progress, idempotent child-folder/page jobs, and whole-tree completion accounting. | Incremental Drive changes/deletion, generalized provider scheduling, status APIs/UI, wider cross-provider replay tests, and operational metrics. |
+| `SEARCH-001` | Partial | Authorized exact, FTS, vector, and trigram retrieval, typed filters, fusion, ranking, safe empty results, history, and API/database isolation tests work against indexed content; PostgreSQL tests prove Gmail content and Drive descriptors reach that index. | Live-provider certification, Drive content parsing, UI result/filter states, production semantic embeddings, and a labeled retrieval evaluation corpus. |
 | `ANSWER-001` | Partial | Bounded authorized context produces extractive material claims with one-to-one citations and an explicit `no_authorized_results` insufficient-evidence response. | Production model gateway, synthesis/conflict evaluator, streaming UI, and measured grounding evaluation. |
 | `CITATION-001` | Partial | The API derives excerpts and allowlisted HTTPS targets from authorized stored metadata, links claims to stable source/chunk IDs, and omits unavailable targets. | UI rendering/opening, target reauthorization endpoint, revoked-target end-to-end tests, and measured citation correctness. |
 | `CONNECTION-001` | Partial | Connection, exact scope, cursor, deletion, job, and outbox storage exists; Google credentials use per-record AES-256-GCM envelope encryption, are decrypted only for claimed work, and refreshed credentials are re-encrypted. | Disconnect/revocation, KMS-backed key wrapping and rotation, sync cancellation, cascade workers, progress API/UI, and 24-hour enforcement. |
@@ -110,7 +110,7 @@ logging, metrics, and the Phase 4 review remain open.
 - `app_api`, `app_worker`, and `app_audit_reader` are non-login,
   non-`BYPASSRLS` roles. Identity and tenant tables use forced, fail-closed RLS.
 - Compose runs migrations to completion before starting the API and worker, and
-  readiness rejects any revision other than `0006_gmail_reconciliation`.
+  readiness rejects any revision other than `0007_drive_sync_runtime`.
 - An ephemeral PostgreSQL 16/pgvector Docker suite runs Python quality gates
   and `19` authentication, Google/Gmail, indexing, search, catalog,
   migration-lifecycle, foreign-key, and tenant-isolation tests in CI.
@@ -165,7 +165,7 @@ user-visible workflows.
   functions and forced RLS protect account, session, and membership reads.
 - Six catalogued endpoints implement register, email verification, login,
   refresh, logout, and `me`; the Next.js page provides their minimal UI.
-- `133 backend tests at 90.99% line coverage`, `19 PostgreSQL integration tests`,
+- `138 backend tests at 90.58% line coverage`, `20 PostgreSQL integration tests`,
   web checks, production builds, Docker health checks, and
   `scripts/smoke-auth.py` cover the slice.
 
@@ -272,6 +272,32 @@ Gmail master tasks complete: `11/11`: `P5-001` through `P5-011`, for the tested
 all-mail backend scope. Binary PDF/Office attachment parsing, configurable label
 selection UI, and a live Google sandbox smoke test remain later integrations.
 
+### Google Drive folder synchronization
+
+- The Drive client requests the existing exact read-only scope and lists at most
+  100 children from one validated selected folder per provider request.
+- Explicit field projection and strict parsing preserve stable file IDs, NFC
+  names, parents, owners, MIME types, modified times, sizes, shared-drive IDs,
+  and allowlisted Google links. Duplicate or oversized pages fail closed.
+- My Drive is the default root; a job can carry one explicit selected or shared-
+  drive root. Every discovered subfolder becomes a deterministic durable job.
+- Folder IDs, logical paths, shared-drive IDs, and page tokens remain inside an
+  encrypted progress envelope. A non-secret sync-run UUID coordinates completion.
+- Shortcuts are indexed as inert descriptors and are never followed, so they
+  cannot escape a selected root. Returned children must name the current parent.
+- Files are indexed by immutable Drive ID with a stable descriptor, logical path,
+  owner identities, and safe canonical target. Format-specific content replaces
+  the descriptor in later Drive tasks without changing source identity.
+- Revision `0007_drive_sync_runtime` adds the narrowly granted Drive claim
+  function. The worker marks the connection successful only after all discovered
+  folder/page jobs finish.
+- A live PostgreSQL test proves root → subfolder traversal, encrypted job state,
+  delayed whole-tree completion, descriptor indexing, migration lifecycle, and
+  tenant-safe storage.
+
+Drive master tasks complete: `3/10`: `P6-001` through `P6-003`. PDF extraction
+(`P6-004`) is next.
+
 ## Explicitly unimplemented inventory
 
 The following do not exist in production code yet:
@@ -280,8 +306,9 @@ The following do not exist in production code yet:
   authentication, search, indexing, and connection repositories.
 - Password recovery, reauthentication, Google login, GitHub authorization,
   production KMS integration, authentication abuse throttling, and account profile editing.
-- Real Drive, GitHub, or local-file content clients. Gmail full and incremental
-  synchronization are implemented.
+- Drive content download/parsers, incremental changes, and deletion handling;
+  bounded folder traversal and descriptor indexing are implemented. GitHub and
+  local-file content clients do not exist yet.
 - Binary attachment content extraction, PDF/Office parsers, OCR, production semantic
   embeddings, and provider-specific extraction policies.
 - Conversations, production model calls, streamed answers, or conflict-aware
@@ -306,7 +333,7 @@ define design ownership:
 | `B4` | Authentication vertical slice | **Complete:** users, password/session security, register/verify/login/refresh/logout/me endpoints, workspace bootstrap, minimal UI, PostgreSQL tests, and a live Docker smoke test. |
 | `B5` | Stage 07 indexing design and implementation | **Complete:** deterministic text/Markdown extraction, chunking, deduplication, local embeddings, durable jobs, authoritative worker claims, atomic promotion, and fake-connector-to-index PostgreSQL tests. |
 | `B6` | Stage 03 search implementation | **Complete:** tenant-safe exact/FTS/vector/trigram retrieval, filters, fusion/ranking, bounded context, extractive citations, search API/history, and unit/PostgreSQL tests. |
-| `B7` | Real provider and desktop slices | **In progress:** The Gmail backend phase and bounded Drive API client are complete. Drive folder orchestration is next, followed by content formats, GitHub, and local desktop behavior, each certified and integrated end to end. |
+| `B7` | Real provider and desktop slices | **In progress:** The Gmail backend phase and bounded Drive folder traversal are complete. Drive content formats are next, followed by incremental deletion, GitHub, and local desktop behavior, each certified and integrated end to end. |
 
 The active backfill item is always the first unfinished row. Backfills `B0`
 through `B6` are complete; `B7` is active. No later slice may be reported

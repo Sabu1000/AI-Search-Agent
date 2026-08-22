@@ -7,10 +7,13 @@ from collections.abc import Sequence
 from universal_ai_search import __version__
 from universal_ai_search.config import get_settings
 from universal_ai_search.connections.crypto import LocalEnvelopeEncryption
+from universal_ai_search.connections.drive import HttpDriveClient
 from universal_ai_search.connections.gmail import HttpGmailClient
 from universal_ai_search.indexing.pipeline import IndexingPipeline
 from universal_ai_search.indexing.repository import IndexRepository
 from universal_ai_search.indexing.runtime import IndexingRuntime
+from universal_ai_search.sync.drive_repository import DriveSyncRepository
+from universal_ai_search.sync.drive_runtime import DriveSyncRuntime
 from universal_ai_search.sync.repository import GoogleSyncRepository
 from universal_ai_search.sync.runtime import GmailSyncRuntime
 
@@ -66,15 +69,30 @@ def main(argv: Sequence[str] | None = None) -> int:
         ),
         enabled=settings.google_oauth_enabled,
     )
+    drive_sync_runtime = DriveSyncRuntime(
+        repository=DriveSyncRepository(settings.database_url),
+        index_repository=index_repository,
+        client=HttpDriveClient(
+            client_id=settings.google_client_id,
+            client_secret=settings.google_client_secret.get_secret_value(),
+        ),
+        encryption=LocalEnvelopeEncryption(
+            settings.provider_encryption_key.get_secret_value().encode()
+        ),
+        enabled=settings.google_oauth_enabled,
+    )
     worker_id = f"{socket.gethostname()}:{__version__}"
     if arguments.once:
-        if not sync_runtime.run_once(worker_id):
+        if not sync_runtime.run_once(worker_id) and not drive_sync_runtime.run_once(
+            worker_id
+        ):
             runtime.run_once(worker_id)
         return 0
     while True:
         synced = sync_runtime.run_once(worker_id)
+        drive_synced = drive_sync_runtime.run_once(worker_id)
         indexed = runtime.run_once(worker_id)
-        consumed = synced or indexed
+        consumed = synced or drive_synced or indexed
         if not consumed:
             time.sleep(arguments.poll_interval)
 
