@@ -207,6 +207,11 @@ Removing a source or connection prevents new leases, cancels safe pending work,
 excludes it from retrieval immediately, and delegates hard deletion to the
 documented deletion workflow.
 
+The implemented Drive paths now convert PDF, DOCX/Google Docs, XLSX/Google Sheets,
+and PPTX/Google Slides into bounded normalized text before this shared pipeline.
+An authoritative completed Drive scan also removes all derived index artifacts
+for absent file IDs; incomplete traversal cannot trigger that reconciliation.
+
 ## Limits and failure behavior
 
 Configured limits cover raw bytes, extracted characters, structural blocks,

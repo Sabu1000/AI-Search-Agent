@@ -48,6 +48,20 @@ from universal_ai_search.connections.drive_pdf import (
     extract_pdf,
     normalize_drive_pdf,
 )
+from universal_ai_search.connections.drive_sheets import (
+    DRIVE_GOOGLE_SHEET_MIME_TYPE,
+    DRIVE_XLSX_MIME_TYPE,
+    SheetExtraction,
+    extract_xlsx,
+    normalize_drive_sheet,
+)
+from universal_ai_search.connections.drive_slides import (
+    DRIVE_GOOGLE_SLIDES_MIME_TYPE,
+    DRIVE_PPTX_MIME_TYPE,
+    SlideExtraction,
+    extract_pptx,
+    normalize_drive_slides,
+)
 from universal_ai_search.connections.google import DRIVE_READONLY_SCOPE
 from universal_ai_search.indexing.repository import IndexRepository
 
@@ -91,6 +105,9 @@ class DriveSyncRuntime:
             sync_input = self._repository.load(claim)
             if sync_input.payload.get("mode") != "full":
                 raise DriveSyncPayloadError
+            if sync_input.payload.get("drive_reconcile") is True:
+                self._reconcile(claim, sync_input.payload)
+                return True
             credentials = self._credentials(claim, sync_input)
             fresh = asyncio.run(self._client.ensure_fresh(credentials))
             if fresh != credentials:
@@ -159,6 +176,7 @@ class DriveSyncRuntime:
             )
         )
         scheduled: list[ScheduledDriveJob] = []
+        seen_external_ids: list[str] = []
         for item in page.items:
             if folder_id not in item.parent_ids:
                 raise MalformedItemError("Drive child escaped its selected parent")
@@ -178,6 +196,13 @@ class DriveSyncRuntime:
                     claim.connection_id,
                     self._document(item, logical_path, access_token),
                 )
+                seen_external_ids.append(item.id)
+        self._index_repository.mark_provider_sync_seen(
+            claim.workspace_id,
+            claim.connection_id,
+            tuple(seen_external_ids),
+            sync_run_id,
+        )
         if page.next_page_token:
             scheduled.append(
                 self._page_job(
@@ -200,7 +225,52 @@ class DriveSyncRuntime:
             return self._pdf_document(item, logical_path, access_token)
         if item.mime_type in {DRIVE_DOCX_MIME_TYPE, DRIVE_GOOGLE_DOC_MIME_TYPE}:
             return self._word_document(item, logical_path, access_token)
+        if item.mime_type == DRIVE_GOOGLE_SHEET_MIME_TYPE:
+            return self._sheet_document(item, logical_path, access_token)
+        if item.mime_type == DRIVE_GOOGLE_SLIDES_MIME_TYPE:
+            return self._slides_document(item, logical_path, access_token)
         return normalize_drive_item(item, logical_path=logical_path)
+
+    def _sheet_document(
+        self, item: DriveItem, logical_path: tuple[str, ...], access_token: str
+    ) -> NormalizedDocument:
+        extraction: SheetExtraction
+        try:
+            data = asyncio.run(
+                self._client.export_file(
+                    access_token=access_token,
+                    file_id=item.id,
+                    mime_type=DRIVE_XLSX_MIME_TYPE,
+                )
+            )
+            extraction = extract_xlsx(data)
+        except DriveDownloadTooLargeError:
+            extraction = SheetExtraction("too_large")
+        return normalize_drive_sheet(item, extraction, logical_path=logical_path)
+
+    def _slides_document(
+        self, item: DriveItem, logical_path: tuple[str, ...], access_token: str
+    ) -> NormalizedDocument:
+        extraction: SlideExtraction
+        try:
+            data = asyncio.run(
+                self._client.export_file(
+                    access_token=access_token,
+                    file_id=item.id,
+                    mime_type=DRIVE_PPTX_MIME_TYPE,
+                )
+            )
+            extraction = extract_pptx(data)
+        except DriveDownloadTooLargeError:
+            extraction = SlideExtraction("too_large")
+        return normalize_drive_slides(item, extraction, logical_path=logical_path)
+
+    def _reconcile(self, claim: ClaimedSyncJob, payload: dict[str, object]) -> None:
+        sync_run_id = self._uuid_value(payload, "drive_sync_run_id")
+        self._index_repository.reconcile_drive_full_sync(
+            claim.workspace_id, claim.connection_id, sync_run_id
+        )
+        self._repository.complete_reconciliation(claim, sync_run_id=sync_run_id)
 
     def _pdf_document(
         self, item: DriveItem, logical_path: tuple[str, ...], access_token: str

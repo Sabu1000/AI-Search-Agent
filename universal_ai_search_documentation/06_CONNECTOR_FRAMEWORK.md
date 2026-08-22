@@ -345,6 +345,28 @@ and canonical link remain the source identity. Malformed, oversized,
 archive-expanded, empty, and truncated inputs keep a safe descriptor and explicit
 extraction status without aborting the folder page.
 
+Native Google Sheets use `files.export` to produce XLSX while retaining their
+native Drive identity and MIME type. Extraction preserves workbook sheet names,
+non-empty rows, shared and inline strings, booleans, formulas, and cached values.
+It caps downloads at 20 MiB, expanded archives at 50 MiB, individual XML parts
+at 10 MiB, workbooks at 200 sheets and 250,000 cells, and output at 4.9 million
+characters. Malformed, empty, oversized, archive-expanded, structurally excessive,
+and truncated exports remain indexed as safe descriptors with explicit status.
+
+Native Google Slides similarly export to PPTX. The parser preserves numeric slide
+order, visible paragraph text, and speaker notes while capping downloads,
+expanded archives, individual XML parts, slide count, and output characters.
+It blocks XML entities and produces the same bounded fallback statuses without
+failing the surrounding folder traversal.
+
+Every successfully indexed Drive page marks its non-folder IDs with a random
+per-scan UUID. The final folder/page transaction schedules one deterministic,
+retryable reconciliation job only when the whole tree has completed without a
+failed or active traversal job. Reconciliation tombstones active Drive sources
+whose marker is absent, purges versions, chunks, embeddings, people, citations,
+and pending index work, updates usage/generation state, and retains only a scrubbed
+source tombstone. A failed or partial scan never reaches this deletion barrier.
+
 ### GitHub
 
 - Authenticate as a GitHub App installation scoped to selected repositories.

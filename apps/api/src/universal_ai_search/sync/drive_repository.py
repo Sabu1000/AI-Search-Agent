@@ -176,6 +176,43 @@ class DriveSyncRepository:
                 or int(summary["failure_count"]) != 0
             ):
                 return
+            reconciliation_job_id = uuid5(sync_run_id, "drive-full-reconciliation")
+            connection.execute(
+                """INSERT INTO app.jobs (
+                    id, workspace_id, connection_id, job_type, queue,
+                    idempotency_key, status, payload
+                ) VALUES (%s, %s, %s, 'sync', 'sync', %s, 'pending', %s::JSONB)
+                ON CONFLICT (workspace_id, job_type, idempotency_key) DO NOTHING""",
+                (
+                    reconciliation_job_id,
+                    claim.workspace_id,
+                    claim.connection_id,
+                    f"drive-reconcile:{sync_run_id}",
+                    json.dumps(
+                        {
+                            "drive_reconcile": True,
+                            "drive_sync_run_id": str(sync_run_id),
+                            "mode": "full",
+                            "source_families": ["google_drive"],
+                        },
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ),
+                ),
+            )
+
+    def complete_reconciliation(
+        self, claim: ClaimedSyncJob, *, sync_run_id: UUID
+    ) -> None:
+        """Complete a full scan only after authoritative deletion cleanup."""
+
+        with psycopg.connect(self._database_url, row_factory=dict_row) as connection:
+            self._context(connection, claim.workspace_id)
+            connection.execute(
+                "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+                (str(sync_run_id),),
+            )
+            self._lock_claim(connection, claim)
             updated = connection.execute(
                 """UPDATE app.connections SET
                     last_successful_sync_at = clock_timestamp(),
@@ -200,6 +237,7 @@ class DriveSyncRepository:
                     json.dumps({"sync_run_id": str(sync_run_id)}),
                 ),
             )
+            self._finish_current(connection, claim)
 
     def fail(
         self,

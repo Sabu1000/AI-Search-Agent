@@ -28,6 +28,8 @@ _NORMALIZED_TEXT_MEDIA_TYPES = frozenset(
         "application/pdf",
         "application/toml",
         "application/vnd.google-apps.document",
+        "application/vnd.google-apps.presentation",
+        "application/vnd.google-apps.spreadsheet",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         "application/xml",
         "application/x-httpd-php",

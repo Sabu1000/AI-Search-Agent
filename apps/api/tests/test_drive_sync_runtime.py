@@ -24,6 +24,14 @@ from universal_ai_search.connections.drive_docx import (
     DRIVE_GOOGLE_DOC_MIME_TYPE,
 )
 from universal_ai_search.connections.drive_pdf import MAX_DRIVE_PDF_BYTES
+from universal_ai_search.connections.drive_sheets import (
+    DRIVE_GOOGLE_SHEET_MIME_TYPE,
+    DRIVE_XLSX_MIME_TYPE,
+)
+from universal_ai_search.connections.drive_slides import (
+    DRIVE_GOOGLE_SLIDES_MIME_TYPE,
+    DRIVE_PPTX_MIME_TYPE,
+)
 from universal_ai_search.connections.google import DRIVE_READONLY_SCOPE
 from universal_ai_search.sync.drive_runtime import DriveSyncRuntime
 from universal_ai_search.sync.repository import ClaimedSyncJob, GoogleSyncInput
@@ -275,6 +283,62 @@ def test_page_downloads_docx_and_exports_native_google_docs() -> None:
     }
     assert documents[1].provider_metadata["document_source_kind"] == (
         "google_docs_export"
+    )
+
+
+def test_page_exports_native_google_sheets_and_slides() -> None:
+    repository = Mock()
+    client = FakeDriveClient()
+    client.page_result = DrivePage(
+        (
+            item("sheet_1", "Launch tracker", DRIVE_GOOGLE_SHEET_MIME_TYPE),
+            item("slides_1", "Launch review", DRIVE_GOOGLE_SLIDES_MIME_TYPE),
+        ),
+        None,
+    )
+    sync = runtime(repository, client)
+
+    assert sync.run_once("worker") is True
+    assert client.exports == [
+        ("sheet_1", DRIVE_XLSX_MIME_TYPE),
+        ("slides_1", DRIVE_PPTX_MIME_TYPE),
+    ]
+    documents = [
+        call.args[2]
+        for call in sync._index_repository.enqueue.call_args_list  # noqa: SLF001
+    ]
+    assert documents[0].provider_metadata["document_source_kind"] == (
+        "google_sheets_export"
+    )
+    assert documents[1].provider_metadata["document_source_kind"] == (
+        "google_slides_export"
+    )
+    marker = repository.finish_page.call_args.kwargs["sync_run_id"]
+    sync._index_repository.mark_provider_sync_seen.assert_called_once_with(  # noqa: SLF001
+        WORKSPACE_ID, CONNECTION_ID, ("sheet_1", "slides_1"), marker
+    )
+
+
+def test_reconciliation_job_tombstones_absent_drive_sources() -> None:
+    repository = Mock()
+    sync = runtime(repository, FakeDriveClient())
+    encryption = LocalEnvelopeEncryption(b"e" * 32)
+    repository.load.return_value = encrypted_input(
+        encryption,
+        payload={
+            "drive_reconcile": True,
+            "drive_sync_run_id": str(JOB_ID),
+            "mode": "full",
+            "source_families": ["google_drive"],
+        },
+    )
+
+    assert sync.run_once("worker") is True
+    sync._index_repository.reconcile_drive_full_sync.assert_called_once_with(  # noqa: SLF001
+        WORKSPACE_ID, CONNECTION_ID, JOB_ID
+    )
+    repository.complete_reconciliation.assert_called_once_with(
+        claim(), sync_run_id=JOB_ID
     )
 
 

@@ -380,6 +380,27 @@ class IndexRepository:
             ).fetchall()
             return self._purge_sources(connection, workspace_id, sources)
 
+    def reconcile_drive_full_sync(
+        self, workspace_id: UUID, connection_id: UUID, sync_marker: UUID
+    ) -> int:
+        """Purge Drive sources absent from a completed authoritative tree scan."""
+
+        with psycopg.connect(self._database_url, row_factory=dict_row) as connection:
+            self._set_worker_context(connection, workspace_id)
+            sources = connection.execute(
+                """SELECT source.id, source.state, source.lock_version,
+                    source.current_document_version_id, version.extracted_bytes
+                FROM app.sources AS source
+                LEFT JOIN app.document_versions AS version
+                  ON version.id = source.current_document_version_id
+                WHERE source.workspace_id = %s AND source.connection_id = %s
+                  AND source.provider = 'google_drive' AND source.state = 'active'
+                  AND source.provider_sync_marker IS DISTINCT FROM %s
+                FOR UPDATE OF source""",
+                (workspace_id, connection_id, sync_marker),
+            ).fetchall()
+            return self._purge_sources(connection, workspace_id, sources)
+
     @staticmethod
     def _purge_sources(
         connection: psycopg.Connection[dict[str, object]],

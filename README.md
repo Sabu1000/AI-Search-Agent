@@ -23,7 +23,7 @@ separately so a validated design is never presented as working product code.
   authorization plus bounded Gmail full/incremental synchronization and advanced
   email parsing, attachment extraction, normalization, deletion reconciliation,
   and error recovery implemented
-- Next implementation slice: Google Sheets export/extraction (`P6-007`)
+- Next implementation slice: Google Drive phase review (`P6-010`)
 - Product status: tested project foundation, an implemented 33-table
   PostgreSQL schema with forced tenant RLS, an implemented Python connector
   SDK, a tested fail-closed API platform layer, and a working six-endpoint
@@ -33,9 +33,10 @@ separately so a validated design is never presented as working product code.
   searchable sender/recipient metadata in the index. Completed Gmail scans now
   reconcile provider absences, deletions purge derived index data, and transient
   failures use bounded durable retries. Google Drive now traverses selected
-  folder trees and extracts bounded PDF, DOCX, and native Google Docs content
-  with safe fallback descriptors; remaining Drive formats, provider UIs, and the
-  40 product endpoints remain to be built
+  folder trees and extracts bounded PDF, DOCX, Google Docs, Sheets, and Slides
+  content with safe fallback descriptors. Completed Drive scans reconcile
+  provider absences and purge deleted sources only after the whole tree succeeds;
+  provider UIs and the 40 remaining product endpoints remain to be built
 - Safety boundary: version 1 is read-only; retrieved content is untrusted data
   and cannot trigger actions
 
@@ -171,9 +172,14 @@ retain explicit fallback statuses when empty, encrypted, malformed, or oversized
 Uploaded DOCX files are safely expanded and preserve headings, paragraphs, lists,
 and tables. Native Google Docs are exported read-only to DOCX and use that same
 bounded parser while retaining their original Drive identity and MIME type. Google
-Sheets and Slides are the next Drive formats. There is not yet a connection UI,
-and the live Google sandbox
-smoke test still requires your own Google test project.
+Native Google Sheets are exported to XLSX with named-sheet, row, cell, formula,
+and value extraction. Native Google Slides are exported to PPTX with ordered
+slide and speaker-note extraction. Both parsers enforce download, archive, XML,
+structure, and text limits. A full-tree completion barrier marks every seen file
+and runs retryable reconciliation only after every folder/page succeeds, so an
+absent Drive file is purged without allowing a failed partial scan to erase data.
+There is not yet a connection UI, and the live Google sandbox smoke test still
+requires your own Google test project.
 
 ## Docker foundation
 
