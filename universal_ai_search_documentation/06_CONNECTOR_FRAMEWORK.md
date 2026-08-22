@@ -4,7 +4,8 @@
 > tested. The wider connector phase is partial (`7/11` master tasks). The Gmail
 > phase is complete (`11/11`) for the tested all-mail backend scope, including
 > normalization, reconciliation, derived-data deletion, and bounded recovery;
-> Drive, GitHub, and local-file provider clients remain. See
+> The bounded read-only Drive listing client is implemented; Drive folder
+> orchestration and content formats, GitHub, and local-file providers remain. See
 > [`IMPLEMENTATION_STATUS.md`](IMPLEMENTATION_STATUS.md).
 
 ## Goals and ownership
@@ -308,6 +309,14 @@ register the fake implementation.
   time; IDs—not paths—define identity.
 - Use Drive change page tokens and emit removals plus permission changes.
 - Shortcuts are represented without recursively escaping selected roots.
+
+The implemented Drive API adapter lists at most 100 children of one validated
+folder per request, supports shared-drive corpora, requests an explicit field
+projection, and rejects malformed, oversized, or duplicate provider pages. It
+normalizes stable file IDs, names, owners, parents, modified time, MIME type,
+size, safe Google links, and shortcut targets. File descriptors are inert and
+shortcuts are represented without following their targets. Durable folder-tree
+orchestration is the next Drive task.
 
 ### GitHub
 

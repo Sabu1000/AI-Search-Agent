@@ -168,7 +168,7 @@ Rules:
 
 # Phase 6 — Google Drive
 
-- [ ] P6-001 Drive API client
+- [x] P6-001 Drive API client
 - [x] P6-002 OAuth scopes
 - [ ] P6-003 Folder sync
 - [ ] P6-004 PDF support

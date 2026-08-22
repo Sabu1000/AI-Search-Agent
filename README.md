@@ -23,7 +23,7 @@ separately so a validated design is never presented as working product code.
   authorization plus bounded Gmail full/incremental synchronization and advanced
   email parsing, attachment extraction, normalization, deletion reconciliation,
   and error recovery implemented
-- Next implementation slice: Google Drive scopes and API client (`P6-001`)
+- Next implementation slice: bounded Google Drive folder sync (`P6-003`)
 - Product status: tested project foundation, an implemented 33-table
   PostgreSQL schema with forced tenant RLS, an implemented Python connector
   SDK, a tested fail-closed API platform layer, and a working six-endpoint
