@@ -155,6 +155,36 @@ async def test_client_downloads_file_media_with_read_only_bounded_request() -> N
 
 
 @pytest.mark.asyncio
+async def test_client_exports_native_google_file_as_docx() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, content=b"docx-data")
+
+    client = HttpDriveClient(
+        client_id="client",
+        client_secret="secret",
+        transport=httpx.MockTransport(handler),
+    )
+    mime_type = (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+
+    assert (
+        await client.export_file(
+            access_token="access", file_id="native_1", mime_type=mime_type
+        )
+        == b"docx-data"
+    )
+    request = requests[0]
+    assert request.method == "GET"
+    assert request.url.path == "/drive/v3/files/native_1/export"
+    assert dict(request.url.params) == {"mimeType": mime_type}
+    assert request.headers["Authorization"] == "Bearer access"
+
+
+@pytest.mark.asyncio
 async def test_client_rejects_declared_and_streamed_oversized_downloads() -> None:
     declared = HttpDriveClient(
         client_id="c",

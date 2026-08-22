@@ -4,8 +4,9 @@
 > tested. The wider connector phase is partial (`7/11` master tasks). The Gmail
 > phase is complete (`11/11`) for the tested all-mail backend scope, including
 > normalization, reconciliation, derived-data deletion, and bounded recovery;
-> Bounded read-only Drive folder traversal and PDF extraction are implemented;
-> remaining Drive formats, GitHub, and local-file providers remain. See
+> Bounded read-only Drive folder traversal plus PDF, DOCX, and Google Docs
+> extraction are implemented; remaining Drive formats, GitHub, and local-file
+> providers remain. See
 > [`IMPLEMENTATION_STATUS.md`](IMPLEMENTATION_STATUS.md).
 
 ## Goals and ownership
@@ -314,8 +315,8 @@ The implemented Drive API adapter lists at most 100 children of one validated
 folder per request, supports shared-drive corpora, requests an explicit field
 projection, and rejects malformed, oversized, or duplicate provider pages. It
 normalizes stable file IDs, names, owners, parents, modified time, MIME type,
-size, safe Google links, and shortcut targets. Non-PDF descriptors are inert and
-shortcuts are represented without following their targets.
+size, safe Google links, and shortcut targets. Unsupported-format descriptors are
+inert and shortcuts are represented without following their targets.
 
 The Drive worker traverses a selected root (My Drive by default) through durable
 folder and page jobs. It indexes non-folder descriptors, schedules discovered
@@ -332,6 +333,17 @@ deterministically and indexed while preserving `application/pdf` for filtering.
 Empty, encrypted, malformed, oversized, excessive-page, and truncated PDFs keep
 their stable searchable descriptor plus a bounded `extraction_status`, so hostile
 content cannot fail the surrounding folder scan or disappear silently.
+
+Uploaded DOCX files use the same 20 MiB media bound plus independent limits of
+2,000 ZIP members, 50 MiB total expanded content, 10 MiB document XML, and 4.9
+million extracted characters. Defused XML parsing prevents entity expansion;
+headings, paragraphs, numbered/bulleted lines, and table row/cell boundaries are
+preserved deterministically. Native Google Docs use the read-only `files.export`
+endpoint to request DOCX under Google's 10 MB export response limit, then enter
+that same parser. Their original Google file ID, native MIME type, logical path,
+and canonical link remain the source identity. Malformed, oversized,
+archive-expanded, empty, and truncated inputs keep a safe descriptor and explicit
+extraction status without aborting the folder page.
 
 ### GitHub
 

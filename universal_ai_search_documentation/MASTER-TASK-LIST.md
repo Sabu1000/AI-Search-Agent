@@ -172,8 +172,8 @@ Rules:
 - [x] P6-002 OAuth scopes
 - [x] P6-003 Folder sync
 - [x] P6-004 PDF support
-- [ ] P6-005 DOCX support
-- [ ] P6-006 Google Docs support
+- [x] P6-005 DOCX support
+- [x] P6-006 Google Docs support
 - [ ] P6-007 Google Sheets support
 - [ ] P6-008 Google Slides support
 - [ ] P6-009 Delete handling

@@ -34,6 +34,14 @@ from universal_ai_search.connections.drive import (
     HttpDriveClient,
     normalize_drive_item,
 )
+from universal_ai_search.connections.drive_docx import (
+    DRIVE_DOCX_MIME_TYPE,
+    DRIVE_GOOGLE_DOC_MIME_TYPE,
+    DocxExtraction,
+    WordSourceKind,
+    extract_docx,
+    normalize_drive_word_document,
+)
 from universal_ai_search.connections.drive_pdf import (
     DRIVE_PDF_MIME_TYPE,
     PdfExtraction,
@@ -188,8 +196,16 @@ class DriveSyncRuntime:
     def _document(
         self, item: DriveItem, logical_path: tuple[str, ...], access_token: str
     ) -> NormalizedDocument:
-        if item.mime_type != DRIVE_PDF_MIME_TYPE:
-            return normalize_drive_item(item, logical_path=logical_path)
+        if item.mime_type == DRIVE_PDF_MIME_TYPE:
+            return self._pdf_document(item, logical_path, access_token)
+        if item.mime_type in {DRIVE_DOCX_MIME_TYPE, DRIVE_GOOGLE_DOC_MIME_TYPE}:
+            return self._word_document(item, logical_path, access_token)
+        return normalize_drive_item(item, logical_path=logical_path)
+
+    def _pdf_document(
+        self, item: DriveItem, logical_path: tuple[str, ...], access_token: str
+    ) -> NormalizedDocument:
+        extraction: PdfExtraction
         if item.size is not None and item.size > MAX_DRIVE_DOWNLOAD_BYTES:
             extraction = PdfExtraction("too_large")
         else:
@@ -203,6 +219,43 @@ class DriveSyncRuntime:
             except DriveDownloadTooLargeError:
                 extraction = PdfExtraction("too_large")
         return normalize_drive_pdf(item, extraction, logical_path=logical_path)
+
+    def _word_document(
+        self, item: DriveItem, logical_path: tuple[str, ...], access_token: str
+    ) -> NormalizedDocument:
+        source_kind: WordSourceKind = (
+            "google_docs_export"
+            if item.mime_type == DRIVE_GOOGLE_DOC_MIME_TYPE
+            else "docx"
+        )
+        extraction: DocxExtraction
+        if item.size is not None and item.size > MAX_DRIVE_DOWNLOAD_BYTES:
+            extraction = DocxExtraction("too_large")
+        else:
+            try:
+                if source_kind == "google_docs_export":
+                    data = asyncio.run(
+                        self._client.export_file(
+                            access_token=access_token,
+                            file_id=item.id,
+                            mime_type=DRIVE_DOCX_MIME_TYPE,
+                        )
+                    )
+                else:
+                    data = asyncio.run(
+                        self._client.download_file(
+                            access_token=access_token, file_id=item.id
+                        )
+                    )
+                extraction = extract_docx(data)
+            except DriveDownloadTooLargeError:
+                extraction = DocxExtraction("too_large")
+        return normalize_drive_word_document(
+            item,
+            extraction,
+            logical_path=logical_path,
+            source_kind=source_kind,
+        )
 
     def _folder_job(
         self,

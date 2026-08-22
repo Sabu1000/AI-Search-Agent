@@ -66,7 +66,9 @@ macros/scripts, resolve external entities, open arbitrary local paths, or trust
 file extensions over validated content type.
 
 The initial B5 implementation accepts already-normalized `text/plain` and
-`text/markdown`. Later provider phases add isolated, resource-limited parsers:
+`text/markdown`. The Drive provider now adds resource-limited PDF and DOCX
+parsers, with native Google Docs exported through the DOCX path. Later provider
+phases add the remaining isolated parsers:
 
 | Format | Required preserved structure |
 | --- | --- |

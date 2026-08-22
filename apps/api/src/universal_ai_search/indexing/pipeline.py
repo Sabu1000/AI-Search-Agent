@@ -27,6 +27,8 @@ _NORMALIZED_TEXT_MEDIA_TYPES = frozenset(
         # while preserving the original media type for filtering and display.
         "application/pdf",
         "application/toml",
+        "application/vnd.google-apps.document",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         "application/xml",
         "application/x-httpd-php",
         "application/x-ndjson",

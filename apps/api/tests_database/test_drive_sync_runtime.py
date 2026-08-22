@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime, timedelta
+from io import BytesIO
 from uuid import UUID
+from zipfile import ZIP_DEFLATED, ZipFile
 
 import psycopg
 from conftest import database_dsn
@@ -15,6 +17,10 @@ from universal_ai_search.connections.drive import (
     DRIVE_FOLDER_MIME_TYPE,
     DriveItem,
     DrivePage,
+)
+from universal_ai_search.connections.drive_docx import (
+    DRIVE_DOCX_MIME_TYPE,
+    DRIVE_GOOGLE_DOC_MIME_TYPE,
 )
 from universal_ai_search.connections.google import DRIVE_READONLY_SCOPE
 from universal_ai_search.indexing.pipeline import IndexingPipeline
@@ -62,6 +68,26 @@ def searchable_pdf() -> bytes:
     return bytes(result)
 
 
+def searchable_docx(text: str) -> bytes:
+    xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr>
+      <w:r><w:t>{text}</w:t></w:r>
+    </w:p>
+    <w:tbl><w:tr>
+      <w:tc><w:p><w:r><w:t>Owner</w:t></w:r></w:p></w:tc>
+      <w:tc><w:p><w:r><w:t>Ready</w:t></w:r></w:p></w:tc>
+    </w:tr></w:tbl>
+  </w:body>
+</w:document>"""
+    output = BytesIO()
+    with ZipFile(output, "w", ZIP_DEFLATED) as archive:
+        archive.writestr("[Content_Types].xml", "<Types/>")
+        archive.writestr("word/document.xml", xml)
+    return output.getvalue()
+
+
 def drive_item(
     item_id: str,
     name: str,
@@ -95,18 +121,35 @@ class FakeDriveClient:
                 (
                     drive_item("folder_1", "Projects", DRIVE_FOLDER_MIME_TYPE, "root"),
                     drive_item("file_1", "Overview.pdf", "application/pdf", "root"),
+                    drive_item(
+                        "gdoc_1",
+                        "Native roadmap",
+                        DRIVE_GOOGLE_DOC_MIME_TYPE,
+                        "root",
+                    ),
                 ),
                 None,
             )
         assert folder_id == "folder_1"
         return DrivePage(
-            (drive_item("file_2", "Plan.txt", "text/plain", "folder_1"),),
+            (drive_item("file_2", "Plan.docx", DRIVE_DOCX_MIME_TYPE, "folder_1"),),
             None,
         )
 
     async def download_file(self, **values: object) -> bytes:
-        assert values == {"access_token": "synthetic-access", "file_id": "file_1"}
-        return searchable_pdf()
+        assert values["access_token"] == "synthetic-access"
+        if values["file_id"] == "file_1":
+            return searchable_pdf()
+        assert values["file_id"] == "file_2"
+        return searchable_docx("Uploaded Word launch plan")
+
+    async def export_file(self, **values: object) -> bytes:
+        assert values == {
+            "access_token": "synthetic-access",
+            "file_id": "gdoc_1",
+            "mime_type": DRIVE_DOCX_MIME_TYPE,
+        }
+        return searchable_docx("Native Google roadmap")
 
 
 def test_drive_folder_tree_queues_and_indexes_durably(
@@ -222,6 +265,7 @@ def test_drive_folder_tree_queues_and_indexes_durably(
     index_runtime = IndexingRuntime(index_repository, IndexingPipeline())
     assert index_runtime.run_once("drive-index-test")
     assert index_runtime.run_once("drive-index-test")
+    assert index_runtime.run_once("drive-index-test")
     assert (
         connection.execute(
             """SELECT source.external_id, source.provider,
@@ -234,7 +278,8 @@ def test_drive_folder_tree_queues_and_indexes_durably(
         ).fetchall()
         == [
             ("file_1", "google_drive", "My Drive/Overview.pdf", "ready"),
-            ("file_2", "google_drive", "My Drive/Projects/Plan.txt", "ready"),
+            ("file_2", "google_drive", "My Drive/Projects/Plan.docx", "ready"),
+            ("gdoc_1", "google_drive", "My Drive/Native roadmap", "ready"),
         ]
     )
     pdf = connection.execute(
@@ -248,3 +293,17 @@ def test_drive_folder_tree_queues_and_indexes_durably(
     assert pdf is not None
     assert pdf[0] == "extracted"
     assert "Quarterly launch plan" in str(pdf[1])
+    word_documents = connection.execute(
+        """SELECT source.external_id,
+            source.metadata ->> 'document_source_kind', version.normalized_text
+        FROM app.sources AS source
+        JOIN app.document_versions AS version
+          ON version.id = source.current_document_version_id
+        WHERE source.connection_id = %s AND source.external_id IN ('file_2', 'gdoc_1')
+        ORDER BY source.external_id""",
+        (CONNECTION_ID,),
+    ).fetchall()
+    assert word_documents[0][0:2] == ("file_2", "docx")
+    assert "Uploaded Word launch plan" in str(word_documents[0][2])
+    assert word_documents[1][0:2] == ("gdoc_1", "google_docs_export")
+    assert "Native Google roadmap" in str(word_documents[1][2])

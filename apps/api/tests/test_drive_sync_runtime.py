@@ -19,6 +19,10 @@ from universal_ai_search.connections.drive import (
     DriveItem,
     DrivePage,
 )
+from universal_ai_search.connections.drive_docx import (
+    DRIVE_DOCX_MIME_TYPE,
+    DRIVE_GOOGLE_DOC_MIME_TYPE,
+)
 from universal_ai_search.connections.drive_pdf import MAX_DRIVE_PDF_BYTES
 from universal_ai_search.connections.google import DRIVE_READONLY_SCOPE
 from universal_ai_search.sync.drive_runtime import DriveSyncRuntime
@@ -95,6 +99,7 @@ class FakeDriveClient:
         self.failure: Exception | None = None
         self.downloads: list[str] = []
         self.download_result = b"not a pdf"
+        self.exports: list[tuple[str, str]] = []
 
     async def ensure_fresh(self, credentials: Credentials) -> Credentials:
         return credentials
@@ -111,6 +116,14 @@ class FakeDriveClient:
         assert isinstance(file_id, str)
         self.downloads.append(file_id)
         return self.download_result
+
+    async def export_file(self, **values: object) -> bytes:
+        assert values["access_token"] == "access"
+        file_id, mime_type = values["file_id"], values["mime_type"]
+        assert isinstance(file_id, str)
+        assert isinstance(mime_type, str)
+        self.exports.append((file_id, mime_type))
+        return b"not a docx"
 
 
 def runtime(repository: Mock, client: FakeDriveClient) -> DriveSyncRuntime:
@@ -229,6 +242,40 @@ def test_page_downloads_pdfs_and_indexes_safe_extraction_statuses() -> None:
     ]
     assert documents[0].provider_metadata["extraction_status"] == "invalid"
     assert documents[1].provider_metadata["extraction_status"] == "too_large"
+
+
+def test_page_downloads_docx_and_exports_native_google_docs() -> None:
+    repository = Mock()
+    client = FakeDriveClient()
+    client.page_result = DrivePage(
+        (
+            item("word_1", "Plan.docx", DRIVE_DOCX_MIME_TYPE),
+            item("gdoc_1", "Native plan", DRIVE_GOOGLE_DOC_MIME_TYPE),
+        ),
+        None,
+    )
+    sync = runtime(repository, client)
+
+    assert sync.run_once("worker") is True
+    assert client.downloads == ["word_1"]
+    assert client.exports == [("gdoc_1", DRIVE_DOCX_MIME_TYPE)]
+    documents = [
+        call.args[2]
+        for call in sync._index_repository.enqueue.call_args_list  # noqa: SLF001
+    ]
+    assert documents[0].provider_metadata == {
+        "document_source_kind": "docx",
+        "extracted_character_count": 0,
+        "extraction_status": "invalid",
+        "file_id": "word_1",
+        "logical_path": "My Drive/Plan.docx",
+        "paragraph_count": 0,
+        "parent_ids": ["root"],
+        "table_count": 0,
+    }
+    assert documents[1].provider_metadata["document_source_kind"] == (
+        "google_docs_export"
+    )
 
 
 def test_encrypted_progress_continues_selected_shared_drive_folder() -> None:

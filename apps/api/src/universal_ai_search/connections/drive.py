@@ -361,14 +361,36 @@ class HttpDriveClient:
 
         if _FILE_ID.fullmatch(file_id) is None:
             raise MalformedItemError("Drive file selection is invalid")
+        return await self._download(
+            access_token=access_token,
+            path=f"files/{quote(file_id, safe='')}",
+            params={"alt": "media", "supportsAllDrives": "true"},
+        )
+
+    async def export_file(
+        self, *, access_token: str, file_id: str, mime_type: str
+    ) -> bytes:
+        """Export one native Google file into a bounded parseable representation."""
+
+        if _FILE_ID.fullmatch(file_id) is None or not mime_type or len(mime_type) > 255:
+            raise MalformedItemError("Drive export selection is invalid")
+        return await self._download(
+            access_token=access_token,
+            path=f"files/{quote(file_id, safe='')}/export",
+            params={"mimeType": mime_type},
+        )
+
+    async def _download(
+        self, *, access_token: str, path: str, params: dict[str, str]
+    ) -> bytes:
         try:
             async with (
                 httpx.AsyncClient(timeout=30, transport=self._transport) as client,
                 client.stream(
                     "GET",
-                    f"{DRIVE_API_ROOT}/files/{quote(file_id, safe='')}",
+                    f"{DRIVE_API_ROOT}/{path}",
                     headers={"Authorization": f"Bearer {access_token}"},
-                    params={"alt": "media", "supportsAllDrives": "true"},
+                    params=params,
                 ) as response,
             ):
                 if not response.is_success:
