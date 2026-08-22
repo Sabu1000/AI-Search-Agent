@@ -177,7 +177,7 @@ Rules:
 - [x] P6-007 Google Sheets support
 - [x] P6-008 Google Slides support
 - [x] P6-009 Delete handling
-- [ ] P6-010 Phase review
+- [x] P6-010 Phase review
 
 **Milestone:** Google Drive documents are searchable.
 

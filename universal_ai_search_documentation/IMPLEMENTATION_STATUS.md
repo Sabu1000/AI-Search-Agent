@@ -2,8 +2,8 @@
 
 **Last audited:** 2026-08-21
 
-**Audited baseline:** `de3045c`; this ledger includes the current Google Sheets,
-Google Slides, and authoritative Drive deletion checkpoint within `B7`.
+**Audited baseline:** `64f4678`; this ledger includes the completed Google Drive
+backend phase review checkpoint within `B7`.
 
 **Purpose:** Separate validated design specifications from working product
 features and keep an evidence-based record of the next implementation step.
@@ -32,7 +32,7 @@ shells are never counted as finished user features.
 | `03_SEARCH_ENGINE_DESIGN.md` | Complete | Local-index backend implemented; product phase partial | Exact/title, PostgreSQL FTS, pgvector, and trigram lanes run inside API-role RLS; typed filters, weighted RRF, deterministic reranking/deduplication, bounded context, extractive claims/citations, history persistence, safe empty answers, and `/v1/search` pass unit and live PostgreSQL tests. Production semantic/model adapters, relevance evaluation corpus, conflict evaluator, cache, and UI remain. |
 | `04_DATABASE_SCHEMA.md` | Complete | Database runtime implemented; phase partial | Alembic creates `33/33` specified tables, authoritative index/Gmail/Drive claim functions, constraints, indexes, roles, grants, and forced RLS. Compose migrates before API startup; readiness checks revision `0007_drive_sync_runtime`; 20 PostgreSQL integration tests cover auth, Google authorization, Gmail sync/reconciliation, Drive traversal/document extraction, indexing/search, catalog, lifecycle, and tenant isolation. Seed data, backup automation, and the Phase 3 review remain. |
 | `05_API_SPECIFICATION.md` | Complete | API platform, auth, search, and Google authorization implemented; product API partial | FastAPI has the OpenAPI 3.1 `/v1` boundary, request IDs, strict serialization, RFC 9457 problems, signed cursors, idempotency primitives, and working authentication/workspace backends. `9/49` catalogued product endpoints exist; rate limiting, SSE, remaining repositories, and other feature services remain. |
-| `06_CONNECTOR_FRAMEWORK.md` | Complete | SDK, OAuth, Gmail backend phase, and bounded Drive extraction/reconciliation implemented; provider ecosystem partial | The complete tested Gmail backend and bounded read-only Drive traversal plus PDF, uploaded DOCX, native Docs/Sheets/Slides extraction, and authoritative deletion reconciliation are implemented. Drive uses durable jobs, encrypted traversal progress, stable identity/metadata, shared-drive parameters, shortcut non-traversal, bounded media/export downloads, structure-aware parsers, safe fallback states, and a whole-tree deletion barrier. GitHub, local files, incremental Drive changes, general scheduling, logging, and metrics remain. |
+| `06_CONNECTOR_FRAMEWORK.md` | Complete | SDK plus tested Gmail and Google Drive backend phases implemented; provider ecosystem partial | The complete tested Gmail backend and selected-root Drive backend phase are certified. Drive provides bounded read-only traversal, PDF/uploaded-DOCX/native-Docs/Sheets/Slides extraction, authoritative deletion reconciliation, durable jobs, encrypted progress, stable identity/metadata, shared-drive parameters, shortcut non-traversal, safe fallback states, and a whole-tree deletion barrier. GitHub, local files, incremental Drive change polling, general scheduling, logging, and metrics remain. |
 | `07_INDEXING_PIPELINE.md` | Complete | Normalized text/Markdown plus bounded Drive document parser paths implemented | Deterministic normalization, structure-aware bounded PDF/DOCX/XLSX/PPTX extraction, language selection, chunking, exact/near deduplication, local 1,536-dimensional embeddings, durable PostgreSQL leasing, atomic promotion, unchanged skips, re-index supersession, and Drive deletion purging pass unit and PostgreSQL/pgvector tests. Production embedding providers remain a later integration. |
 | `08_SECURITY_AND_PRIVACY.md` | Complete | Partial controls | The threat model, data classification, tenant/cryptographic boundaries, browser/input/model defenses, audit/redaction policy, deletion/backup rules, and security release gates are implementation-ready. Existing RLS, strict API boundaries, secret validation, and containerized tests implement only part of the required controls. |
 | `09_AUTH_AND_OAUTH.md` | Complete | Authentication, Google connection authorization, and worker refresh implemented; remaining provider/recovery work partial | Existing password/session behavior includes single-use Google callbacks, PKCE S256, exact read-only scopes, envelope-encrypted credentials, per-family jobs, in-memory worker decryption, and re-encryption after access-token refresh. Password recovery, reauthentication, Google login, GitHub authorization, revocation, key rotation/KMS integration, abuse throttling, and the full security review remain. |
@@ -41,8 +41,9 @@ The active implementation slice is provider and desktop integration through
 backfill `B7`. The tested Gmail backend phase is complete, including Google
 authorization, full/incremental sync, extraction, normalization, reconciliation,
 derived-data deletion, and error recovery. Bounded Drive folder traversal, PDF,
-DOCX, native Docs/Sheets/Slides extraction, and authoritative deletion handling
-are complete; the Drive phase review is next.
+DOCX, native Docs/Sheets/Slides extraction, authoritative deletion handling, and
+the selected-root backend phase review are complete. GitHub App authorization is
+next.
 
 ## MVP requirement audit
 
@@ -325,8 +326,9 @@ selection UI, and a live Google sandbox smoke test remain later integrations.
   Sheets, and Slides text reach ready searchable versions, then proves an absent
   Drive file is tombstoned with its derived index data removed.
 
-Drive master tasks complete: `9/10`: `P6-001` through `P6-009`. The Drive phase
-review (`P6-010`) is next.
+Drive master tasks complete: `10/10`: `P6-001` through `P6-010`. The tested
+selected-root backend milestone passes its
+[phase review](DRIVE_PHASE_REVIEW.md); GitHub App authorization (`P7-001`) is next.
 
 ## Explicitly unimplemented inventory
 
@@ -363,7 +365,7 @@ define design ownership:
 | `B4` | Authentication vertical slice | **Complete:** users, password/session security, register/verify/login/refresh/logout/me endpoints, workspace bootstrap, minimal UI, PostgreSQL tests, and a live Docker smoke test. |
 | `B5` | Stage 07 indexing design and implementation | **Complete:** deterministic text/Markdown extraction, chunking, deduplication, local embeddings, durable jobs, authoritative worker claims, atomic promotion, and fake-connector-to-index PostgreSQL tests. |
 | `B6` | Stage 03 search implementation | **Complete:** tenant-safe exact/FTS/vector/trigram retrieval, filters, fusion/ranking, bounded context, extractive citations, search API/history, and unit/PostgreSQL tests. |
-| `B7` | Real provider and desktop slices | **In progress:** The Gmail backend phase plus bounded Drive traversal, PDF/DOCX/Docs/Sheets/Slides extraction, and authoritative deletion reconciliation are complete. The Drive phase review is next, followed by GitHub and local desktop behavior, each certified and integrated end to end. Incremental Drive change-token polling remains later provider hardening. |
+| `B7` | Real provider and desktop slices | **In progress:** The Gmail and selected-root Google Drive backend phases are complete and certified. GitHub App authorization is next, followed by repository content and local desktop behavior, each certified and integrated end to end. Incremental Drive change-token polling remains later provider hardening. |
 
 The active backfill item is always the first unfinished row. Backfills `B0`
 through `B6` are complete; `B7` is active. No later slice may be reported

@@ -31,6 +31,20 @@ while [ "$stage" -le 20 ]; do
   stage=$((stage + 1))
 done
 
+for phase_review in GMAIL_PHASE_REVIEW.md DRIVE_PHASE_REVIEW.md
+do
+  if [ ! -f "$documentation_dir/$phase_review" ]; then
+    printf 'ERROR: completed provider phase review is missing: %s\n' \
+      "$phase_review" >&2
+    failures=$((failures + 1))
+  fi
+
+  if ! grep -Fq "]($phase_review)" "$documentation_index"; then
+    printf 'ERROR: 00_README.md does not link to %s.\n' "$phase_review" >&2
+    failures=$((failures + 1))
+  fi
+done
+
 for document in \
   01_PROJECT_SPEC.md \
   02_SYSTEM_ARCHITECTURE.md \
@@ -69,4 +83,4 @@ if [ "$failures" -ne 0 ]; then
   exit 1
 fi
 
-printf '%s\n' 'Documentation validation passed: stages 00-20 are present and linked.'
+printf '%s\n' 'Documentation validation passed: stages and completed provider phase reviews are present and linked.'

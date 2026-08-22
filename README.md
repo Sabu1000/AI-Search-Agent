@@ -22,8 +22,10 @@ separately so a validated design is never presented as working product code.
 - Backfill status: `B0` through `B6` are complete; `B7` is active, with Google
   authorization plus bounded Gmail full/incremental synchronization and advanced
   email parsing, attachment extraction, normalization, deletion reconciliation,
-  and error recovery implemented
-- Next implementation slice: Google Drive phase review (`P6-010`)
+  and error recovery implemented. The selected-root Google Drive backend phase is
+  also complete and certified, including bounded document extraction and deletion
+  reconciliation
+- Next implementation slice: GitHub App authorization (`P7-001`)
 - Product status: tested project foundation, an implemented 33-table
   PostgreSQL schema with forced tenant RLS, an implemented Python connector
   SDK, a tested fail-closed API platform layer, and a working six-endpoint
@@ -178,6 +180,9 @@ slide and speaker-note extraction. Both parsers enforce download, archive, XML,
 structure, and text limits. A full-tree completion barrier marks every seen file
 and runs retryable reconciliation only after every folder/page succeeds, so an
 absent Drive file is purged without allowing a failed partial scan to erase data.
+The tested selected-root Google Drive backend phase is now complete; its evidence
+and explicit boundary are recorded in the
+[Drive phase review](universal_ai_search_documentation/DRIVE_PHASE_REVIEW.md).
 There is not yet a connection UI, and the live Google sandbox smoke test still
 requires your own Google test project.
 

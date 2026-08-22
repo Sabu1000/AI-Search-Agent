@@ -30,6 +30,11 @@ feature is implemented. The evidence-based product status is maintained in
 19. [`19_LOCAL_DEVELOPMENT.md`](19_LOCAL_DEVELOPMENT.md)
 20. [`20_THREAT_MODEL.md`](20_THREAT_MODEL.md)
 
+## Completed provider phase reviews
+
+- [Gmail backend phase](GMAIL_PHASE_REVIEW.md)
+- [Google Drive backend phase](DRIVE_PHASE_REVIEW.md)
+
 ## MVP scope
 
 - User accounts

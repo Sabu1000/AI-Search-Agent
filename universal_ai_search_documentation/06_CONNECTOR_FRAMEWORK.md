@@ -367,6 +367,11 @@ whose marker is absent, purges versions, chunks, embeddings, people, citations,
 and pending index work, updates usage/generation state, and retains only a scrubbed
 source tombstone. A failed or partial scan never reaches this deletion barrier.
 
+The selected-root Google Drive backend scope is certified in the
+[Google Drive phase review](DRIVE_PHASE_REVIEW.md). Incremental Changes API
+polling, provider UI, and live Google-project certification remain explicit later
+integrations rather than hidden conditions of that completed backend milestone.
+
 ### GitHub
 
 - Authenticate as a GitHub App installation scoped to selected repositories.
