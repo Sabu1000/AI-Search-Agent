@@ -17,6 +17,8 @@ from uas_connector_sdk.errors import (
 from universal_ai_search.connections.drive import (
     DRIVE_FOLDER_MIME_TYPE,
     DRIVE_SHORTCUT_MIME_TYPE,
+    MAX_DRIVE_DOWNLOAD_BYTES,
+    DriveDownloadTooLargeError,
     HttpDriveClient,
     normalize_drive_item,
     parse_drive_item,
@@ -122,6 +124,69 @@ async def test_client_lists_one_bounded_selected_folder_page() -> None:
     assert request.url.params["q"] == "'folder_1' in parents and trashed = false"
     assert request.url.params["corpora"] == "drive"
     assert request.url.params["driveId"] == "shared_1"
+
+
+@pytest.mark.asyncio
+async def test_client_downloads_file_media_with_read_only_bounded_request() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, content=b"pdf-data", headers={"Content-Length": "8"})
+
+    client = HttpDriveClient(
+        client_id="client",
+        client_secret="secret",
+        transport=httpx.MockTransport(handler),
+    )
+
+    assert (
+        await client.download_file(access_token="access", file_id="file_1")
+        == b"pdf-data"
+    )
+    request = requests[0]
+    assert request.method == "GET"
+    assert request.url.path == "/drive/v3/files/file_1"
+    assert dict(request.url.params) == {
+        "alt": "media",
+        "supportsAllDrives": "true",
+    }
+    assert request.headers["Authorization"] == "Bearer access"
+
+
+@pytest.mark.asyncio
+async def test_client_rejects_declared_and_streamed_oversized_downloads() -> None:
+    declared = HttpDriveClient(
+        client_id="c",
+        client_secret="s",
+        transport=httpx.MockTransport(
+            lambda _: httpx.Response(
+                200, headers={"Content-Length": str(MAX_DRIVE_DOWNLOAD_BYTES + 1)}
+            )
+        ),
+    )
+    with pytest.raises(DriveDownloadTooLargeError):
+        await declared.download_file(access_token="access", file_id="file_1")
+
+    streamed = HttpDriveClient(
+        client_id="c",
+        client_secret="s",
+        transport=httpx.MockTransport(
+            lambda _: httpx.Response(200, content=b"x" * (MAX_DRIVE_DOWNLOAD_BYTES + 1))
+        ),
+    )
+    with pytest.raises(DriveDownloadTooLargeError):
+        await streamed.download_file(access_token="access", file_id="file_1")
+
+    malformed = HttpDriveClient(
+        client_id="c",
+        client_secret="s",
+        transport=httpx.MockTransport(
+            lambda _: httpx.Response(200, headers={"Content-Length": "invalid"})
+        ),
+    )
+    with pytest.raises(MalformedItemError):
+        await malformed.download_file(access_token="access", file_id="file_1")
 
 
 @pytest.mark.asyncio

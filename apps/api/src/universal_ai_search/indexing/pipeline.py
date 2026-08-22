@@ -23,6 +23,9 @@ _NORMALIZED_TEXT_MEDIA_TYPES = frozenset(
     {
         "application/json",
         "application/ld+json",
+        # Connector parsers convert these formats to bounded normalized text
+        # while preserving the original media type for filtering and display.
+        "application/pdf",
         "application/toml",
         "application/xml",
         "application/x-httpd-php",

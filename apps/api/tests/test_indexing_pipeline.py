@@ -100,7 +100,7 @@ def test_version_identity_changes_with_permissions_and_is_repeatable() -> None:
     ("content", "mime_type", "code"),
     [
         ("", "text/plain", "NO_INDEXABLE_TEXT"),
-        ("hello", "application/pdf", "UNSUPPORTED_MEDIA_TYPE"),
+        ("hello", "application/octet-stream", "UNSUPPORTED_MEDIA_TYPE"),
     ],
 )
 def test_prepare_rejects_unindexable_inputs(

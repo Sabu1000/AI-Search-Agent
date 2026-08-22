@@ -14,7 +14,7 @@ from uuid import UUID, uuid4, uuid5
 
 from cryptography.exceptions import InvalidTag
 from pydantic import SecretStr, ValidationError
-from uas_connector_sdk import Credentials
+from uas_connector_sdk import Credentials, NormalizedDocument
 from uas_connector_sdk.errors import (
     AuthenticationError,
     ConnectorError,
@@ -28,9 +28,17 @@ from universal_ai_search.connections.crypto import (
     envelope_context,
 )
 from universal_ai_search.connections.drive import (
+    MAX_DRIVE_DOWNLOAD_BYTES,
+    DriveDownloadTooLargeError,
     DriveItem,
     HttpDriveClient,
     normalize_drive_item,
+)
+from universal_ai_search.connections.drive_pdf import (
+    DRIVE_PDF_MIME_TYPE,
+    PdfExtraction,
+    extract_pdf,
+    normalize_drive_pdf,
 )
 from universal_ai_search.connections.google import DRIVE_READONLY_SCOPE
 from universal_ai_search.indexing.repository import IndexRepository
@@ -160,7 +168,7 @@ class DriveSyncRuntime:
                 self._index_repository.enqueue(
                     claim.workspace_id,
                     claim.connection_id,
-                    normalize_drive_item(item, logical_path=logical_path),
+                    self._document(item, logical_path, access_token),
                 )
         if page.next_page_token:
             scheduled.append(
@@ -176,6 +184,25 @@ class DriveSyncRuntime:
         self._repository.finish_page(
             claim, sync_run_id=sync_run_id, scheduled_jobs=tuple(scheduled)
         )
+
+    def _document(
+        self, item: DriveItem, logical_path: tuple[str, ...], access_token: str
+    ) -> NormalizedDocument:
+        if item.mime_type != DRIVE_PDF_MIME_TYPE:
+            return normalize_drive_item(item, logical_path=logical_path)
+        if item.size is not None and item.size > MAX_DRIVE_DOWNLOAD_BYTES:
+            extraction = PdfExtraction("too_large")
+        else:
+            try:
+                data = asyncio.run(
+                    self._client.download_file(
+                        access_token=access_token, file_id=item.id
+                    )
+                )
+                extraction = extract_pdf(data)
+            except DriveDownloadTooLargeError:
+                extraction = PdfExtraction("too_large")
+        return normalize_drive_pdf(item, extraction, logical_path=logical_path)
 
     def _folder_job(
         self,

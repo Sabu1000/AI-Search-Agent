@@ -28,6 +28,7 @@ DRIVE_API_ROOT = "https://www.googleapis.com/drive/v3"
 DRIVE_PAGE_SIZE = 100
 DRIVE_FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"
 DRIVE_SHORTCUT_MIME_TYPE = "application/vnd.google-apps.shortcut"
+MAX_DRIVE_DOWNLOAD_BYTES = 20 * 1024 * 1024
 _EXPIRY_SKEW = timedelta(minutes=2)
 _FILE_ID = re.compile(r"[A-Za-z0-9_-]{1,512}\Z")
 _ALLOWED_LINK_HOSTS = frozenset(
@@ -62,6 +63,10 @@ class DriveItem:
 class DrivePage:
     items: tuple[DriveItem, ...]
     next_page_token: str | None
+
+
+class DriveDownloadTooLargeError(Exception):
+    """The provider file exceeded the connector's fixed download limit."""
 
 
 def _provider_error(response: httpx.Response) -> Exception:
@@ -350,6 +355,46 @@ class HttpDriveClient:
         ):
             raise MalformedItemError("Drive page token is invalid")
         return DrivePage(items, next_page_token)
+
+    async def download_file(self, *, access_token: str, file_id: str) -> bytes:
+        """Download one regular Drive file with a strict response-size bound."""
+
+        if _FILE_ID.fullmatch(file_id) is None:
+            raise MalformedItemError("Drive file selection is invalid")
+        try:
+            async with (
+                httpx.AsyncClient(timeout=30, transport=self._transport) as client,
+                client.stream(
+                    "GET",
+                    f"{DRIVE_API_ROOT}/files/{quote(file_id, safe='')}",
+                    headers={"Authorization": f"Bearer {access_token}"},
+                    params={"alt": "media", "supportsAllDrives": "true"},
+                ) as response,
+            ):
+                if not response.is_success:
+                    raise _provider_error(response)
+                content_length = response.headers.get("Content-Length")
+                if content_length is not None:
+                    try:
+                        declared_size = int(content_length)
+                    except ValueError as error:
+                        raise MalformedItemError(
+                            "Drive download length is invalid"
+                        ) from error
+                    if declared_size < 0:
+                        raise MalformedItemError("Drive download length is invalid")
+                    if declared_size > MAX_DRIVE_DOWNLOAD_BYTES:
+                        raise DriveDownloadTooLargeError
+                chunks: list[bytes] = []
+                received = 0
+                async for chunk in response.aiter_bytes():
+                    received += len(chunk)
+                    if received > MAX_DRIVE_DOWNLOAD_BYTES:
+                        raise DriveDownloadTooLargeError
+                    chunks.append(chunk)
+                return b"".join(chunks)
+        except httpx.HTTPError as error:
+            raise ProviderUnavailableError() from error
 
     async def _get(
         self,

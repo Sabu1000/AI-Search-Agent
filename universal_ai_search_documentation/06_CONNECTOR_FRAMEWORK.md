@@ -4,8 +4,8 @@
 > tested. The wider connector phase is partial (`7/11` master tasks). The Gmail
 > phase is complete (`11/11`) for the tested all-mail backend scope, including
 > normalization, reconciliation, derived-data deletion, and bounded recovery;
-> Bounded read-only Drive folder traversal is implemented; Drive content formats,
-> GitHub, and local-file providers remain. See
+> Bounded read-only Drive folder traversal and PDF extraction are implemented;
+> remaining Drive formats, GitHub, and local-file providers remain. See
 > [`IMPLEMENTATION_STATUS.md`](IMPLEMENTATION_STATUS.md).
 
 ## Goals and ownership
@@ -314,7 +314,7 @@ The implemented Drive API adapter lists at most 100 children of one validated
 folder per request, supports shared-drive corpora, requests an explicit field
 projection, and rejects malformed, oversized, or duplicate provider pages. It
 normalizes stable file IDs, names, owners, parents, modified time, MIME type,
-size, safe Google links, and shortcut targets. File descriptors are inert and
+size, safe Google links, and shortcut targets. Non-PDF descriptors are inert and
 shortcuts are represented without following their targets.
 
 The Drive worker traverses a selected root (My Drive by default) through durable
@@ -324,6 +324,14 @@ shared-drive IDs, and opaque page tokens are envelope-encrypted in job progress;
 only a random sync-run UUID is visible for completion accounting. Each page is
 atomically handed to indexing before its job completes, and the connection is
 marked successful only after no discovered folder/page job remains.
+
+Regular PDFs are downloaded with `alt=media` under the same read-only scope. Both
+provider-declared and streamed byte counts are capped at 20 MiB; extraction is
+also capped at 500 pages and 4.9 million characters. Extracted text is normalized
+deterministically and indexed while preserving `application/pdf` for filtering.
+Empty, encrypted, malformed, oversized, excessive-page, and truncated PDFs keep
+their stable searchable descriptor plus a bounded `extraction_status`, so hostile
+content cannot fail the surrounding folder scan or disappear silently.
 
 ### GitHub
 

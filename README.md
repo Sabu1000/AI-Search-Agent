@@ -23,7 +23,7 @@ separately so a validated design is never presented as working product code.
   authorization plus bounded Gmail full/incremental synchronization and advanced
   email parsing, attachment extraction, normalization, deletion reconciliation,
   and error recovery implemented
-- Next implementation slice: Google Drive PDF extraction (`P6-004`)
+- Next implementation slice: Google Drive DOCX extraction (`P6-005`)
 - Product status: tested project foundation, an implemented 33-table
   PostgreSQL schema with forced tenant RLS, an implemented Python connector
   SDK, a tested fail-closed API platform layer, and a working six-endpoint
@@ -33,8 +33,8 @@ separately so a validated design is never presented as working product code.
   searchable sender/recipient metadata in the index. Completed Gmail scans now
   reconcile provider absences, deletions purge derived index data, and transient
   failures use bounded durable retries. Google Drive now traverses selected
-  folder trees and indexes stable searchable file descriptors; Drive content parsing,
-  provider UIs, and the remaining
+  folder trees, extracts bounded PDF text, and safely indexes descriptors for
+  unparseable PDFs; remaining Drive formats, provider UIs, and the remaining
   40 product endpoints remain to be built
 - Safety boundary: version 1 is read-only; retrieved content is untrusted data
   and cannot trigger actions
@@ -165,8 +165,11 @@ as structured metadata. Person filters use those identities, and metadata can
 refresh without creating a duplicate content version. Drive jobs now traverse one
 bounded folder page at a time, keep folder/page state encrypted, index stable file
 descriptors with logical paths and owners, and never follow shortcuts outside the
-selected tree. PDF and native document content extraction are the next Drive
-steps. There is not yet a connection UI, and the live Google sandbox
+selected tree. PDFs are downloaded through the read-only media endpoint with a
+20 MiB limit, parsed into normalized searchable text with page/text bounds, and
+retain explicit fallback statuses when empty, encrypted, malformed, or oversized.
+DOCX and native Google document extraction are the next Drive steps. There is not
+yet a connection UI, and the live Google sandbox
 smoke test still requires your own Google test project.
 
 ## Docker foundation

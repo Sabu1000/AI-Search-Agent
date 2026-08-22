@@ -29,6 +29,39 @@ CONNECTION_ID = UUID("93000000-0000-4000-8000-000000000001")
 JOB_ID = UUID("94000000-0000-4000-8000-000000000001")
 
 
+def searchable_pdf() -> bytes:
+    stream = b"BT /F1 12 Tf 72 720 Td (Quarterly launch plan) Tj ET"
+    objects = (
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        (
+            b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+            b"/Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>"
+        ),
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        b"<< /Length "
+        + str(len(stream)).encode()
+        + b" >>\nstream\n"
+        + stream
+        + b"\nendstream",
+    )
+    result = bytearray(b"%PDF-1.4\n")
+    offsets: list[int] = []
+    for number, value in enumerate(objects, 1):
+        offsets.append(len(result))
+        result.extend(f"{number} 0 obj\n".encode())
+        result.extend(value)
+        result.extend(b"\nendobj\n")
+    xref = len(result)
+    result.extend(b"xref\n0 6\n0000000000 65535 f \n")
+    for offset in offsets:
+        result.extend(f"{offset:010d} 00000 n \n".encode())
+    result.extend(
+        f"trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode()
+    )
+    return bytes(result)
+
+
 def drive_item(
     item_id: str,
     name: str,
@@ -61,7 +94,7 @@ class FakeDriveClient:
             return DrivePage(
                 (
                     drive_item("folder_1", "Projects", DRIVE_FOLDER_MIME_TYPE, "root"),
-                    drive_item("file_1", "Overview.txt", "text/plain", "root"),
+                    drive_item("file_1", "Overview.pdf", "application/pdf", "root"),
                 ),
                 None,
             )
@@ -70,6 +103,10 @@ class FakeDriveClient:
             (drive_item("file_2", "Plan.txt", "text/plain", "folder_1"),),
             None,
         )
+
+    async def download_file(self, **values: object) -> bytes:
+        assert values == {"access_token": "synthetic-access", "file_id": "file_1"}
+        return searchable_pdf()
 
 
 def test_drive_folder_tree_queues_and_indexes_durably(
@@ -196,7 +233,18 @@ def test_drive_folder_tree_queues_and_indexes_durably(
             (CONNECTION_ID,),
         ).fetchall()
         == [
-            ("file_1", "google_drive", "My Drive/Overview.txt", "ready"),
+            ("file_1", "google_drive", "My Drive/Overview.pdf", "ready"),
             ("file_2", "google_drive", "My Drive/Projects/Plan.txt", "ready"),
         ]
     )
+    pdf = connection.execute(
+        """SELECT source.metadata ->> 'extraction_status', version.normalized_text
+        FROM app.sources AS source
+        JOIN app.document_versions AS version
+          ON version.id = source.current_document_version_id
+        WHERE source.connection_id = %s AND source.external_id = 'file_1'""",
+        (CONNECTION_ID,),
+    ).fetchone()
+    assert pdf is not None
+    assert pdf[0] == "extracted"
+    assert "Quarterly launch plan" in str(pdf[1])

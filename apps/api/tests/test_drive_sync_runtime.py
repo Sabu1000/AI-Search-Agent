@@ -19,6 +19,7 @@ from universal_ai_search.connections.drive import (
     DriveItem,
     DrivePage,
 )
+from universal_ai_search.connections.drive_pdf import MAX_DRIVE_PDF_BYTES
 from universal_ai_search.connections.google import DRIVE_READONLY_SCOPE
 from universal_ai_search.sync.drive_runtime import DriveSyncRuntime
 from universal_ai_search.sync.repository import ClaimedSyncJob, GoogleSyncInput
@@ -38,6 +39,7 @@ def item(
     mime_type: str,
     *,
     parent: str = "root",
+    size: int | None = None,
 ) -> DriveItem:
     return DriveItem(
         id=item_id,
@@ -47,7 +49,7 @@ def item(
         parent_ids=(parent,),
         owners=(),
         web_view_link=None,
-        size=None,
+        size=size,
         drive_id=None,
         shortcut_target_id="target" if mime_type == DRIVE_SHORTCUT_MIME_TYPE else None,
         shortcut_target_mime_type=(
@@ -91,6 +93,8 @@ class FakeDriveClient:
     def __init__(self) -> None:
         self.page_result = DrivePage((), None)
         self.failure: Exception | None = None
+        self.downloads: list[str] = []
+        self.download_result = b"not a pdf"
 
     async def ensure_fresh(self, credentials: Credentials) -> Credentials:
         return credentials
@@ -100,6 +104,13 @@ class FakeDriveClient:
         if self.failure:
             raise self.failure
         return self.page_result
+
+    async def download_file(self, **values: object) -> bytes:
+        assert values["access_token"] == "access"
+        file_id = values["file_id"]
+        assert isinstance(file_id, str)
+        self.downloads.append(file_id)
+        return self.download_result
 
 
 def runtime(repository: Mock, client: FakeDriveClient) -> DriveSyncRuntime:
@@ -191,6 +202,33 @@ def test_page_indexes_files_schedules_folders_and_never_follows_shortcuts() -> N
         "sync_run_id": str(sync_run_id),
     }
     assert scheduled[0].job_id == uuid5(sync_run_id, "drive-folder:folder_1")
+
+
+def test_page_downloads_pdfs_and_indexes_safe_extraction_statuses() -> None:
+    repository = Mock()
+    client = FakeDriveClient()
+    client.page_result = DrivePage(
+        (
+            item("pdf_1", "Searchable.pdf", "application/pdf"),
+            item(
+                "pdf_2",
+                "Large.pdf",
+                "application/pdf",
+                size=MAX_DRIVE_PDF_BYTES + 1,
+            ),
+        ),
+        None,
+    )
+    sync = runtime(repository, client)
+
+    assert sync.run_once("worker") is True
+    assert client.downloads == ["pdf_1"]
+    documents = [
+        call.args[2]
+        for call in sync._index_repository.enqueue.call_args_list  # noqa: SLF001
+    ]
+    assert documents[0].provider_metadata["extraction_status"] == "invalid"
+    assert documents[1].provider_metadata["extraction_status"] == "too_large"
 
 
 def test_encrypted_progress_continues_selected_shared_drive_folder() -> None:
