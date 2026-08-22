@@ -12,6 +12,7 @@ from uas_connector_sdk.errors import (
     AuthenticationError,
     CursorInvalidError,
     ProviderUnavailableError,
+    RateLimitError,
 )
 
 from universal_ai_search.connections.crypto import (
@@ -26,6 +27,7 @@ from universal_ai_search.sync.runtime import GmailSyncRuntime
 WORKSPACE_ID = UUID("10000000-0000-4000-8000-000000000001")
 CONNECTION_ID = UUID("20000000-0000-4000-8000-000000000001")
 JOB_ID = UUID("30000000-0000-4000-8000-000000000001")
+SYNC_MARKER = UUID("40000000-0000-4000-8000-000000000001")
 
 
 def claim() -> ClaimedSyncJob:
@@ -67,6 +69,7 @@ def encrypted_progress(
     job_id: UUID,
     history_id: str,
     page_token: str,
+    sync_marker: UUID = SYNC_MARKER,
 ) -> dict[str, object]:
     context = envelope_context(
         provider="google",
@@ -76,7 +79,11 @@ def encrypted_progress(
     )
     envelope = encryption.encrypt(
         json.dumps(
-            {"history_id": history_id, "page_token": page_token},
+            {
+                "history_id": history_id,
+                "page_token": page_token,
+                "sync_marker": str(sync_marker),
+            },
             sort_keys=True,
             separators=(",", ":"),
         ).encode(),
@@ -122,6 +129,7 @@ def runtime(repository: Mock, client: FakeClient) -> GmailSyncRuntime:
         index_repository=Mock(),
         client=client,  # type: ignore[arg-type]
         encryption=encryption,
+        random_value=lambda: 0.5,
     )
 
 
@@ -151,6 +159,7 @@ def test_empty_queue_and_completed_page() -> None:
     repository.complete.assert_called_once_with(
         claim(), history_id="history-1", mode="full"
     )
+    sync._index_repository.reconcile_gmail_full_sync.assert_called_once()  # noqa: SLF001
     repository.fail.assert_not_called()
 
 
@@ -194,7 +203,11 @@ def test_next_page_is_durably_advanced_without_reloading_history() -> None:
     )
     assert json.loads(
         encryption.decrypt(values["encrypted_progress"], context=context)
-    ) == {"history_id": "history-1", "page_token": "page-2"}
+    ) == {
+        "history_id": "history-1",
+        "page_token": "page-2",
+        "sync_marker": str(SYNC_MARKER),
+    }
 
 
 def test_incremental_page_tombstones_and_advances_cursor() -> None:
@@ -211,7 +224,7 @@ def test_incremental_page_tombstones_and_advances_cursor() -> None:
     )
 
     assert sync.run_once("worker") is True
-    sync._index_repository.tombstone.assert_called_once_with(  # noqa: SLF001
+    sync._index_repository.tombstone_gmail_message.assert_called_once_with(  # noqa: SLF001
         WORKSPACE_ID, CONNECTION_ID, "removed-message"
     )
     repository.complete.assert_called_once_with(
@@ -251,4 +264,35 @@ def test_provider_failures_are_safely_classified() -> None:
             error_code=failure.code.upper(),
             retryable=retryable,
             reauthorization_required=reauthorize,
+            retry_delay_seconds=0.25 if retryable else None,
         )
+
+
+def test_rate_limit_retry_after_is_bounded_and_payload_errors_do_not_retry() -> None:
+    repository = Mock()
+    client = FakeClient()
+    client.failure = RateLimitError(90)
+    sync = runtime(repository, client)
+
+    assert sync.run_once("worker") is True
+    repository.fail.assert_called_once_with(
+        claim(),
+        error_code="RATE_LIMITED",
+        retryable=True,
+        reauthorization_required=False,
+        retry_delay_seconds=30.0,
+    )
+
+    repository = Mock()
+    sync = runtime(repository, FakeClient())
+    repository.load.return_value = encrypted_input(
+        LocalEnvelopeEncryption(b"e" * 32), payload={"mode": "unknown"}
+    )
+
+    assert sync.run_once("worker") is True
+    repository.fail.assert_called_once_with(
+        claim(),
+        error_code="GMAIL_SYNC_PAYLOAD_INVALID",
+        retryable=False,
+        retry_delay_seconds=None,
+    )

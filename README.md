@@ -21,15 +21,18 @@ separately so a validated design is never presented as working product code.
   acceptance is `1/11`
 - Backfill status: `B0` through `B6` are complete; `B7` is active, with Google
   authorization plus bounded Gmail full/incremental synchronization and advanced
-  email parsing, attachment extraction, and structured metadata implemented
-- Next implementation slice: Gmail normalization certification (`P5-008`)
+  email parsing, attachment extraction, normalization, deletion reconciliation,
+  and error recovery implemented
+- Next implementation slice: Google Drive scopes and API client (`P6-001`)
 - Product status: tested project foundation, an implemented 33-table
   PostgreSQL schema with forced tenant RLS, an implemented Python connector
   SDK, a tested fail-closed API platform layer, and a working six-endpoint
   email/password authentication flow with a minimal web UI, durable indexing,
   tenant-safe hybrid search, Google OAuth connection authorization, and Gmail
   full/incremental sync with safe MIME parsing, stable attachment sources, and
-  searchable sender/recipient metadata in the index; Drive synchronization,
+  searchable sender/recipient metadata in the index. Completed Gmail scans now
+  reconcile provider absences, deletions purge derived index data, and transient
+  failures use bounded durable retries; Drive synchronization,
   provider UIs, and the remaining
   40 product endpoints remain to be built
 - Safety boundary: version 1 is read-only; retrieved content is untrusted data
@@ -144,7 +147,12 @@ refreshes encrypted credentials when needed, imports the mailbox in bounded
 25-message pages, queues each normalized message for indexing, and commits the
 Gmail history cursor only after the final page. The worker then polls Gmail
 history in bounded pages, reindexes changed messages, tombstones deleted ones,
-and falls back to a controlled full sync if Gmail expires the cursor. MIME parsing
+purges their attachment and derived index data, and falls back to a controlled
+full sync if Gmail expires the cursor. Full scans use a per-run marker so a
+source is deleted only after an authoritative scan finishes; a failed or partial
+scan cannot erase unseen mail. Rate limits honor bounded `Retry-After` values,
+other transient failures use bounded exponential full jitter, and exhausted or
+permanent failures enter durable terminal states. MIME parsing
 prefers plain text, safely falls back to visible HTML, decodes declared character
 sets and encoded headers, skips attachment bodies, and removes quoted history or
 signatures only at high-confidence boundaries. Attachments are separate stable

@@ -260,6 +260,7 @@ class GoogleSyncRepository:
         error_code: str,
         retryable: bool,
         reauthorization_required: bool = False,
+        retry_delay_seconds: float | None = None,
     ) -> None:
         with psycopg.connect(self._database_url, row_factory=dict_row) as connection:
             self._context(connection, claim.workspace_id)
@@ -286,12 +287,19 @@ class GoogleSyncRepository:
             connection.execute(
                 """UPDATE app.jobs SET status = %s, error_code = %s,
                     available_at = CASE WHEN %s
-                        THEN clock_timestamp() + INTERVAL '30 seconds'
+                        THEN clock_timestamp() + make_interval(secs => %s)
                         ELSE available_at END,
                     lease_owner = NULL, lease_expires_at = NULL,
                     completed_at = CASE WHEN %s THEN NULL ELSE clock_timestamp() END,
                     updated_at = clock_timestamp() WHERE id = %s""",
-                (status, error_code, can_retry, can_retry, claim.job_id),
+                (
+                    status,
+                    error_code,
+                    can_retry,
+                    retry_delay_seconds or 0.0,
+                    can_retry,
+                    claim.job_id,
+                ),
             )
             connection.execute(
                 """UPDATE app.connections SET status = CASE WHEN %s

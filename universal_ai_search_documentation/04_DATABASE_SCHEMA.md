@@ -1,9 +1,9 @@
 # Database Schema
 
 > **Implementation status:** Specification complete; `33/33` specified tables
-> are created by Alembic revision `0001_initial_schema`; revision
-> `0002_auth_runtime` adds the authentication runtime fields and narrowly
-> granted bootstrap functions. Constraints, workload indexes, forced RLS, and
+> are created by Alembic revision `0001_initial_schema`; additive revisions
+> through `0006_gmail_reconciliation` provide the current authentication,
+> indexing, search, and Gmail runtime. Constraints, workload indexes, forced RLS, and
 > PostgreSQL integration tests are active. Non-authentication repository and
 > product-service code remains future work. See
 > [`IMPLEMENTATION_STATUS.md`](IMPLEMENTATION_STATUS.md).
@@ -369,6 +369,7 @@ delivery before creating jobs.
 | `current_document_version_id` | UUID null; composite deferred FK back to this source's document version |
 | `state` | TEXT check `active`, `permission_blocked`, `deleting`, `deleted` |
 | `metadata` | JSONB not null default empty object, bounded provider metadata |
+| `provider_sync_marker` | UUID null; marks membership in a completed authoritative provider scan |
 | `created_at`, `updated_at`, `deleted_at` | TIMESTAMPTZ |
 | `lock_version` | INTEGER not null default 1 |
 
@@ -377,6 +378,10 @@ Only rows in `active` state with a non-null current version are searchable.
 The pointer constraint is `FOREIGN KEY (id, current_document_version_id)
 REFERENCES document_versions(source_id, id) DEFERRABLE INITIALLY DEFERRED`,
 added after both sides exist so it cannot point to another source's version.
+The partial `ix_sources_connection_sync_marker` index supports bounded
+connection-scoped reconciliation without retaining provider item lists in job
+payloads. A scan marker becomes authoritative only when the last provider page
+has been fetched and durably queued.
 
 ### source_people
 

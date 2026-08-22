@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from contextlib import suppress
 from copy import deepcopy
 from dataclasses import dataclass
@@ -59,6 +60,8 @@ def _provider_error(response: httpx.Response) -> Exception:
         retry_after: float | None = None
         with suppress(KeyError, ValueError):
             retry_after = float(response.headers["Retry-After"])
+            if not math.isfinite(retry_after) or retry_after < 0:
+                retry_after = None
         return RateLimitError(retry_after)
     if response.status_code == 403:
         return PermissionDeniedError()
@@ -269,7 +272,7 @@ class HttpGmailClient:
             params["pageToken"] = page_token
         listing = await self._get("messages", access_token=access_token, params=params)
         references = listing.get("messages", [])
-        if not isinstance(references, list):
+        if not isinstance(references, list) or len(references) > GMAIL_PAGE_SIZE:
             raise MalformedItemError("Gmail message listing is invalid")
         documents: list[NormalizedDocument] = []
         for reference in references:
@@ -277,13 +280,17 @@ class HttpGmailClient:
                 reference.get("id"), str
             ):
                 raise MalformedItemError("Gmail message reference is invalid")
-            message = await self._get(
+            message_response = await self._request(
                 f"messages/{reference['id']}",
                 access_token=access_token,
                 params={"format": "full"},
             )
+            if message_response.status_code == 404:
+                continue
             documents.extend(
-                await self._message_documents(message, access_token=access_token)
+                await self._message_documents(
+                    _json(message_response), access_token=access_token
+                )
             )
         next_page_token = listing.get("nextPageToken")
         if next_page_token is not None and not isinstance(next_page_token, str):
@@ -310,7 +317,7 @@ class HttpGmailClient:
             raise CursorInvalidError()
         listing = _json(response)
         records = listing.get("history", [])
-        if not isinstance(records, list):
+        if not isinstance(records, list) or len(records) > GMAIL_HISTORY_PAGE_SIZE:
             raise MalformedItemError("Gmail history listing is invalid")
 
         actions: dict[str, bool] = {}

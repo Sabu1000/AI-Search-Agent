@@ -6,6 +6,9 @@ import asyncio
 import base64
 import hashlib
 import json
+import math
+import random
+from collections.abc import Callable
 from datetime import datetime
 from uuid import UUID, uuid5
 
@@ -16,6 +19,7 @@ from uas_connector_sdk.errors import (
     AuthenticationError,
     ConnectorError,
     CursorInvalidError,
+    RateLimitError,
 )
 
 from universal_ai_search.connections.crypto import (
@@ -46,12 +50,14 @@ class GmailSyncRuntime:
         client: HttpGmailClient,
         encryption: LocalEnvelopeEncryption,
         enabled: bool = True,
+        random_value: Callable[[], float] = random.random,
     ) -> None:
         self._repository = repository
         self._index_repository = index_repository
         self._client = client
         self._encryption = encryption
         self._enabled = enabled
+        self._random_value = random_value
 
     def run_once(self, worker_id: str) -> bool:
         if not self._enabled:
@@ -83,18 +89,30 @@ class GmailSyncRuntime:
                 error_code=error.code.upper(),
                 retryable=error.retryable,
                 reauthorization_required=isinstance(error, AuthenticationError),
+                retry_delay_seconds=(
+                    self._retry_delay(claim, error) if error.retryable else None
+                ),
             )
         except GmailCredentialError:
             self._repository.fail(
-                claim, error_code="GMAIL_CREDENTIAL_INVALID", retryable=False
+                claim,
+                error_code="GMAIL_CREDENTIAL_INVALID",
+                retryable=False,
+                retry_delay_seconds=None,
             )
         except GmailSyncPayloadError:
             self._repository.fail(
-                claim, error_code="GMAIL_SYNC_PAYLOAD_INVALID", retryable=False
+                claim,
+                error_code="GMAIL_SYNC_PAYLOAD_INVALID",
+                retryable=False,
+                retry_delay_seconds=None,
             )
         except Exception:
             self._repository.fail(
-                claim, error_code="GMAIL_SYNC_INTERNAL_ERROR", retryable=True
+                claim,
+                error_code="GMAIL_SYNC_INTERNAL_ERROR",
+                retryable=True,
+                retry_delay_seconds=self._retry_delay(claim),
             )
             raise
         return True
@@ -105,6 +123,10 @@ class GmailSyncRuntime:
         progress = self._progress(claim, sync_input.payload)
         history_id = self._string_value(progress, "history_id")
         page_token = self._string_value(progress, "page_token")
+        if progress is None:
+            sync_marker = uuid5(claim.job_id, "gmail-full-reconciliation")
+        else:
+            sync_marker = self._uuid_value(progress, "sync_marker")
         if history_id is None:
             history_id = asyncio.run(self._client.history_id(access_token))
         page = asyncio.run(
@@ -114,6 +136,12 @@ class GmailSyncRuntime:
             self._index_repository.enqueue(
                 claim.workspace_id, claim.connection_id, document
             )
+        self._index_repository.mark_provider_sync_seen(
+            claim.workspace_id,
+            claim.connection_id,
+            tuple(document.external_id for document in page.documents),
+            sync_marker,
+        )
         if page.next_page_token:
             self._advance(
                 claim,
@@ -122,9 +150,13 @@ class GmailSyncRuntime:
                 progress={
                     "history_id": history_id,
                     "page_token": page.next_page_token,
+                    "sync_marker": str(sync_marker),
                 },
             )
         else:
+            self._index_repository.reconcile_gmail_full_sync(
+                claim.workspace_id, claim.connection_id, sync_marker
+            )
             self._repository.complete(claim, history_id=history_id, mode="full")
 
     def _run_incremental(
@@ -149,7 +181,7 @@ class GmailSyncRuntime:
                 claim.workspace_id, claim.connection_id, document
             )
         for external_id in page.deleted_external_ids:
-            self._index_repository.tombstone(
+            self._index_repository.tombstone_gmail_message(
                 claim.workspace_id, claim.connection_id, external_id
             )
         if page.next_page_token:
@@ -252,6 +284,29 @@ class GmailSyncRuntime:
         if not isinstance(value, str) or not value:
             raise GmailSyncPayloadError
         return value
+
+    @staticmethod
+    def _uuid_value(progress: dict[str, object], key: str) -> UUID:
+        value = progress.get(key)
+        if not isinstance(value, str):
+            raise GmailSyncPayloadError
+        try:
+            parsed = UUID(value)
+        except ValueError as error:
+            raise GmailSyncPayloadError from error
+        if str(parsed) != value:
+            raise GmailSyncPayloadError
+        return parsed
+
+    def _retry_delay(
+        self, claim: ClaimedSyncJob, error: ConnectorError | None = None
+    ) -> float:
+        if isinstance(error, RateLimitError):
+            requested = error.retry_after_seconds
+            if requested is not None and math.isfinite(requested):
+                return min(30.0, max(0.0, requested))
+        cap = min(30.0, 0.5 * (2 ** max(claim.attempt_number - 1, 0)))
+        return float(cap * max(0.0, min(1.0, float(self._random_value()))))
 
     def _credentials(
         self, claim: ClaimedSyncJob, sync_input: GoogleSyncInput

@@ -1,10 +1,10 @@
 # Connector Framework
 
 > **Implementation status:** The shared Connector SDK scope is implemented and
-> tested. The wider connector phase is partial (`7/11` master tasks). A real
-> read-only Gmail full and incremental-sync client with MIME-aware email and
-> attachment extraction exists; Drive, GitHub, and local-file provider clients
-> remain. See
+> tested. The wider connector phase is partial (`7/11` master tasks). The Gmail
+> phase is complete (`11/11`) for the tested all-mail backend scope, including
+> normalization, reconciliation, derived-data deletion, and bounded recovery;
+> Drive, GitHub, and local-file provider clients remain. See
 > [`IMPLEMENTATION_STATUS.md`](IMPLEMENTATION_STATUS.md).
 
 ## Goals and ownership
@@ -99,10 +99,21 @@ continuation boundary as full sync, and the new cursor is committed only on the
 last page. Gmail's expired-cursor `404` fails that incremental job with the
 sanitized `CURSOR_INVALID` code and schedules a controlled full recovery.
 
-This implements `P5-002` through `P5-007` and the immediate search-cutoff part
-of `P5-009`. Binary PDF/Office content parsing, normalization certification, content
-purge, label selection UI, full-list absence reconciliation, and a live Google
-sandbox certification remain separate tasks.
+Each full scan carries an encrypted, deterministic run marker. Sources seen on
+every page receive that marker, and only successful completion reconciles active
+Gmail sources that were absent from the authoritative listing. Message deletion
+purges the parent email, its attachment sources, document versions, chunks,
+embeddings, people rows, and pending index jobs while retaining a scrubbed source
+tombstone. This preserves replay safety without leaving searchable derived data.
+Rate limits honor a validated `Retry-After` value capped at 30 seconds; other
+transient failures use capped exponential full jitter. Authentication failures
+require reauthorization, malformed or permanent failures stop retrying, and
+exhausted transient work is dead-lettered durably.
+
+This implements `P5-001` through `P5-011` for the tested all-mail backend scope.
+Binary PDF/Office content parsing, configurable label-selection UI, and a live
+Google sandbox smoke test remain later integrations rather than unfinished Gmail
+phase tasks.
 
 ## Canonical providers and source identity
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime, timedelta
-from uuid import UUID
+from uuid import UUID, uuid5
 
 import psycopg
 from conftest import database_dsn
@@ -39,41 +39,58 @@ class FakeGmailClient:
         page_token = values["page_token"]
         assert page_token in {None, "page-2"}
         suffix = "1" if page_token is None else "2"
-        return GmailPage(
-            (
-                NormalizedDocument(
-                    external_id=f"gmail-message-{suffix}",
-                    provider=Provider.GMAIL,
-                    source_type="email",
-                    title=f"Gmail integration test {suffix}",
-                    content=(
-                        f"Subject: Gmail integration test {suffix}\n\n"
-                        f"Searchable mailbox content {suffix}."
+        documents = [
+            NormalizedDocument(
+                external_id=f"gmail-message-{suffix}",
+                provider=Provider.GMAIL,
+                source_type="email",
+                title=f"Gmail integration test {suffix}",
+                content=(
+                    f"Subject: Gmail integration test {suffix}\n\n"
+                    f"Searchable mailbox content {suffix}."
+                ),
+                canonical_url=(
+                    "https://mail.google.com/mail/u/0/#all/" f"gmail-message-{suffix}"
+                ),
+                mime_type="text/plain",
+                authors=("sender@example.test",),
+                created_at=datetime(2026, 8, 15, tzinfo=UTC),
+                people=(
+                    DocumentPerson(
+                        relationship="sender",
+                        identity_kind="email",
+                        normalized_identifier="sender@example.test",
                     ),
+                    DocumentPerson(
+                        relationship="recipient",
+                        identity_kind="email",
+                        normalized_identifier="recipient@example.test",
+                    ),
+                ),
+                provider_metadata={"thread_id": "thread-1"},
+            )
+        ]
+        if suffix == "2":
+            documents.append(
+                NormalizedDocument(
+                    external_id="gmail-message-2:attachment:part-1",
+                    provider=Provider.GMAIL,
+                    source_type="attachment",
+                    title="notes.txt",
+                    content="Filename: notes.txt\n\nSearchable attachment content.",
                     canonical_url=(
-                        "https://mail.google.com/mail/u/0/#all/"
-                        f"gmail-message-{suffix}"
+                        "https://mail.google.com/mail/u/0/#all/gmail-message-2"
                     ),
                     mime_type="text/plain",
                     authors=("sender@example.test",),
                     created_at=datetime(2026, 8, 15, tzinfo=UTC),
-                    people=(
-                        DocumentPerson(
-                            relationship="sender",
-                            identity_kind="email",
-                            normalized_identifier="sender@example.test",
-                        ),
-                        DocumentPerson(
-                            relationship="recipient",
-                            identity_kind="email",
-                            normalized_identifier="recipient@example.test",
-                        ),
-                    ),
-                    provider_metadata={"thread_id": "thread-1"},
-                ),
-            ),
-            "page-2" if page_token is None else None,
-        )
+                    provider_metadata={
+                        "parent_message_id": "gmail-message-2",
+                        "part_id": "part-1",
+                    },
+                )
+            )
+        return GmailPage(tuple(documents), "page-2" if page_token is None else None)
 
     async def history_page(self, **values: object) -> GmailHistoryPage:
         assert values["access_token"] == "synthetic-access"
@@ -224,8 +241,11 @@ def test_gmail_full_sync_queues_indexes_and_commits_cursor(
         "SELECT id FROM app.jobs WHERE connection_id = %s AND job_type = 'index'",
         (CONNECTION_ID,),
     ).fetchall()
-    assert len(index_job_ids) == 2
+    assert len(index_job_ids) == 3
 
+    assert IndexingRuntime(index_repository, IndexingPipeline()).run_once(
+        "gmail-index-test"
+    )
     assert IndexingRuntime(index_repository, IndexingPipeline()).run_once(
         "gmail-index-test"
     )
@@ -255,8 +275,20 @@ def test_gmail_full_sync_queues_indexes_and_commits_cursor(
                 "ready",
                 "Subject: Gmail integration test 2\n\nSearchable mailbox content 2.",
             ),
+            (
+                "gmail",
+                "attachment",
+                "ready",
+                "Filename: notes.txt\n\nSearchable attachment content.",
+            ),
         ]
     )
+    assert connection.execute(
+        "SELECT count(DISTINCT provider_sync_marker), "
+        "count(*) FILTER (WHERE provider_sync_marker IS NULL) "
+        "FROM app.sources WHERE connection_id = %s",
+        (CONNECTION_ID,),
+    ).fetchone() == (1, 0)
     assert connection.execute(
         "SELECT relationship, normalized_identifier::TEXT "
         "FROM app.source_people WHERE workspace_id = %s "
@@ -337,7 +369,22 @@ def test_gmail_full_sync_queues_indexes_and_commits_cursor(
     ).fetchall() == [
         ("gmail-message-1", "active"),
         ("gmail-message-2", "deleted"),
+        ("gmail-message-2:attachment:part-1", "deleted"),
     ]
+    assert connection.execute(
+        "SELECT title, metadata, current_document_version_id FROM app.sources "
+        "WHERE connection_id = %s AND state = 'deleted' ORDER BY external_id",
+        (CONNECTION_ID,),
+    ).fetchall() == [
+        ("Deleted source", {}, None),
+        ("Deleted source", {}, None),
+    ]
+    assert connection.execute(
+        "SELECT count(*) FROM app.document_versions AS version "
+        "JOIN app.sources AS source ON source.id = version.source_id "
+        "WHERE source.connection_id = %s AND source.state = 'deleted'",
+        (CONNECTION_ID,),
+    ).fetchone() == (0,)
     assert connection.execute(
         "SELECT version.normalized_text FROM app.sources AS source "
         "JOIN app.document_versions AS version "
@@ -345,3 +392,82 @@ def test_gmail_full_sync_queues_indexes_and_commits_cursor(
         "WHERE source.connection_id = %s AND source.external_id = 'gmail-message-1'",
         (CONNECTION_ID,),
     ).fetchone() == ("Subject: Gmail integration test updated\n\nNew content.",)
+
+    stale = NormalizedDocument(
+        external_id="gmail-stale-message",
+        provider=Provider.GMAIL,
+        source_type="email",
+        title="Stale Gmail message",
+        content="This content is absent from the authoritative full listing.",
+        canonical_url="https://mail.google.com/mail/u/0/#all/gmail-stale-message",
+        mime_type="text/plain",
+    )
+    stale_result = index_repository.enqueue(WORKSPACE_ID, CONNECTION_ID, stale)
+    assert IndexingRuntime(index_repository, IndexingPipeline()).run_once(
+        "gmail-index-test"
+    )
+    reconciliation_marker = uuid5(JOB_ID, "second-full-reconciliation")
+    index_repository.mark_provider_sync_seen(
+        WORKSPACE_ID,
+        CONNECTION_ID,
+        ("gmail-message-1",),
+        reconciliation_marker,
+    )
+    assert (
+        index_repository.reconcile_gmail_full_sync(
+            WORKSPACE_ID, CONNECTION_ID, reconciliation_marker
+        )
+        == 1
+    )
+    assert connection.execute(
+        "SELECT state, current_document_version_id FROM app.sources WHERE id = %s",
+        (stale_result.source_id,),
+    ).fetchone() == ("deleted", None)
+
+    repository = GoogleSyncRepository(database_dsn())
+    retry_job_id = connection.execute(
+        "SELECT id FROM app.jobs WHERE connection_id = %s AND job_type = 'sync' "
+        "AND status = 'pending' AND payload ->> 'mode' = 'incremental'",
+        (CONNECTION_ID,),
+    ).fetchone()
+    assert retry_job_id is not None
+    connection.execute(
+        "UPDATE app.jobs SET max_attempts = 2, available_at = clock_timestamp() "
+        "WHERE id = %s",
+        (retry_job_id[0],),
+    )
+    connection.commit()
+    first_retry = repository.claim("gmail-retry-test")
+    assert first_retry is not None
+    retry_started = connection.execute("SELECT clock_timestamp()").fetchone()
+    assert retry_started is not None
+    repository.fail(
+        first_retry,
+        error_code="RATE_LIMITED",
+        retryable=True,
+        retry_delay_seconds=7.0,
+    )
+    retry_state = connection.execute(
+        "SELECT status, available_at >= %s + INTERVAL '6 seconds', error_code "
+        "FROM app.jobs WHERE id = %s",
+        (retry_started[0], first_retry.job_id),
+    ).fetchone()
+    assert retry_state == ("retry_wait", True, "RATE_LIMITED")
+
+    connection.execute(
+        "UPDATE app.jobs SET available_at = clock_timestamp() WHERE id = %s",
+        (first_retry.job_id,),
+    )
+    connection.commit()
+    exhausted = repository.claim("gmail-retry-test")
+    assert exhausted is not None
+    repository.fail(
+        exhausted,
+        error_code="PROVIDER_UNAVAILABLE",
+        retryable=True,
+        retry_delay_seconds=1.0,
+    )
+    assert connection.execute(
+        "SELECT status, error_code FROM app.jobs WHERE id = %s",
+        (exhausted.job_id,),
+    ).fetchone() == ("dead_letter", "PROVIDER_UNAVAILABLE")

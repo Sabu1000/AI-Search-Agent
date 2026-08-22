@@ -6,6 +6,7 @@ import json
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import PurePosixPath
+from typing import cast
 from uuid import UUID, uuid5
 
 import psycopg
@@ -287,67 +288,182 @@ class IndexRepository:
     def tombstone(
         self, workspace_id: UUID, connection_id: UUID, external_id: str
     ) -> bool:
-        """Make a provider-deleted source immediately unavailable to search."""
+        """Purge one provider-deleted source while retaining a minimal tombstone."""
 
         source_id = uuid5(connection_id, external_id)
         with psycopg.connect(self._database_url, row_factory=dict_row) as connection:
             self._set_worker_context(connection, workspace_id)
-            source = connection.execute(
-                """SELECT source.state, source.current_document_version_id,
-                    version.extracted_bytes
+            sources = connection.execute(
+                """SELECT source.id, source.state, source.lock_version,
+                    source.current_document_version_id, version.extracted_bytes
                 FROM app.sources AS source
                 LEFT JOIN app.document_versions AS version
                   ON version.id = source.current_document_version_id
                 WHERE source.id = %s AND source.workspace_id = %s
                   AND source.connection_id = %s FOR UPDATE OF source""",
                 (source_id, workspace_id, connection_id),
-            ).fetchone()
-            if source is None or source["state"] == "deleted":
-                return False
-            extracted_bytes = int(source["extracted_bytes"] or 0)
-            indexed_source_delta = (
-                1 if source["current_document_version_id"] is not None else 0
-            )
-            connection.execute(
-                """UPDATE app.sources SET state = 'deleted',
-                    deleted_at = clock_timestamp(), updated_at = clock_timestamp(),
-                    lock_version = lock_version + 1 WHERE id = %s""",
-                (source_id,),
-            )
-            connection.execute(
-                """UPDATE app.jobs SET status = 'failed', error_code = 'SOURCE_DELETED',
-                    completed_at = clock_timestamp(), updated_at = clock_timestamp()
-                WHERE source_id = %s AND job_type = 'index'
-                  AND status IN ('pending', 'retry_wait')""",
-                (source_id,),
-            )
-            connection.execute(
-                """UPDATE app.workspace_usage SET
-                    indexed_source_count = GREATEST(indexed_source_count - %s, 0),
-                    extracted_bytes = GREATEST(extracted_bytes - %s, 0),
+            ).fetchall()
+            return bool(self._purge_sources(connection, workspace_id, sources))
+
+    def mark_provider_sync_seen(
+        self,
+        workspace_id: UUID,
+        connection_id: UUID,
+        external_ids: tuple[str, ...],
+        sync_marker: UUID,
+    ) -> None:
+        """Mark one authoritative page as seen without storing its item list."""
+
+        source_ids = tuple(
+            sorted({uuid5(connection_id, external_id) for external_id in external_ids})
+        )
+        if not source_ids:
+            return
+        with psycopg.connect(self._database_url, row_factory=dict_row) as connection:
+            self._set_worker_context(connection, workspace_id)
+            updated = connection.execute(
+                """UPDATE app.sources SET provider_sync_marker = %s,
                     updated_at = clock_timestamp(), lock_version = lock_version + 1
-                WHERE workspace_id = %s""",
-                (indexed_source_delta, extracted_bytes, workspace_id),
+                WHERE workspace_id = %s AND connection_id = %s
+                  AND id = ANY(%s) AND state = 'active'
+                RETURNING id""",
+                (sync_marker, workspace_id, connection_id, list(source_ids)),
+            ).fetchall()
+            if len(updated) != len(source_ids):
+                raise RuntimeError("provider sync page could not be marked complete")
+
+    def tombstone_gmail_message(
+        self, workspace_id: UUID, connection_id: UUID, message_external_id: str
+    ) -> int:
+        """Purge a Gmail message and every attachment derived from that message."""
+
+        with psycopg.connect(self._database_url, row_factory=dict_row) as connection:
+            self._set_worker_context(connection, workspace_id)
+            sources = connection.execute(
+                """SELECT source.id, source.state, source.lock_version,
+                    source.current_document_version_id, version.extracted_bytes
+                FROM app.sources AS source
+                LEFT JOIN app.document_versions AS version
+                  ON version.id = source.current_document_version_id
+                WHERE source.workspace_id = %s AND source.connection_id = %s
+                  AND source.provider = 'gmail'
+                  AND (source.external_id = %s
+                       OR source.metadata ->> 'parent_message_id' = %s)
+                FOR UPDATE OF source""",
+                (
+                    workspace_id,
+                    connection_id,
+                    message_external_id,
+                    message_external_id,
+                ),
+            ).fetchall()
+            return self._purge_sources(connection, workspace_id, sources)
+
+    def reconcile_gmail_full_sync(
+        self, workspace_id: UUID, connection_id: UUID, sync_marker: UUID
+    ) -> int:
+        """Purge active Gmail sources absent from a completed authoritative scan."""
+
+        with psycopg.connect(self._database_url, row_factory=dict_row) as connection:
+            self._set_worker_context(connection, workspace_id)
+            sources = connection.execute(
+                """SELECT source.id, source.state, source.lock_version,
+                    source.current_document_version_id, version.extracted_bytes
+                FROM app.sources AS source
+                LEFT JOIN app.document_versions AS version
+                  ON version.id = source.current_document_version_id
+                WHERE source.workspace_id = %s AND source.connection_id = %s
+                  AND source.provider = 'gmail' AND source.state = 'active'
+                  AND source.provider_sync_marker IS DISTINCT FROM %s
+                FOR UPDATE OF source""",
+                (workspace_id, connection_id, sync_marker),
+            ).fetchall()
+            return self._purge_sources(connection, workspace_id, sources)
+
+    @staticmethod
+    def _purge_sources(
+        connection: psycopg.Connection[dict[str, object]],
+        workspace_id: UUID,
+        sources: list[dict[str, object]],
+    ) -> int:
+        active = [source for source in sources if source["state"] != "deleted"]
+        if not active:
+            return 0
+        source_ids = [cast(UUID, source["id"]) for source in active]
+        deletion_versions = {
+            cast(UUID, source["id"]): cast(int, source["lock_version"])
+            for source in active
+        }
+        indexed_source_delta = sum(
+            source["current_document_version_id"] is not None for source in active
+        )
+        extracted_bytes = sum(
+            (
+                cast(int, source["extracted_bytes"])
+                if source["extracted_bytes"] is not None
+                else 0
             )
-            connection.execute(
-                """UPDATE app.workspaces SET search_index_generation =
-                    search_index_generation + 1, updated_at = clock_timestamp(),
-                    lock_version = lock_version + 1 WHERE id = %s""",
-                (workspace_id,),
-            )
+            for source in active
+        )
+        connection.execute(
+            """UPDATE app.sources SET state = 'deleted', title = 'Deleted source',
+                mime_type = NULL, file_extension = NULL, canonical_url = NULL,
+                author_display = NULL, source_timestamp = NULL,
+                source_timestamp_kind = NULL, current_document_version_id = NULL,
+                metadata = '{}'::JSONB, provider_sync_marker = NULL,
+                deleted_at = clock_timestamp(), updated_at = clock_timestamp(),
+                lock_version = lock_version + 1
+            WHERE workspace_id = %s AND id = ANY(%s)""",
+            (workspace_id, source_ids),
+        )
+        connection.execute(
+            "DELETE FROM app.source_people WHERE workspace_id = %s "
+            "AND source_id = ANY(%s)",
+            (workspace_id, source_ids),
+        )
+        connection.execute(
+            "DELETE FROM app.document_versions WHERE workspace_id = %s "
+            "AND source_id = ANY(%s)",
+            (workspace_id, source_ids),
+        )
+        connection.execute(
+            """UPDATE app.jobs SET status = 'failed', error_code = 'SOURCE_DELETED',
+                completed_at = clock_timestamp(), updated_at = clock_timestamp()
+            WHERE workspace_id = %s AND source_id = ANY(%s) AND job_type = 'index'
+              AND status IN ('pending', 'retry_wait')""",
+            (workspace_id, source_ids),
+        )
+        connection.execute(
+            """UPDATE app.workspace_usage SET
+                indexed_source_count = GREATEST(indexed_source_count - %s, 0),
+                extracted_bytes = GREATEST(extracted_bytes - %s, 0),
+                updated_at = clock_timestamp(), lock_version = lock_version + 1
+            WHERE workspace_id = %s""",
+            (indexed_source_delta, extracted_bytes, workspace_id),
+        )
+        connection.execute(
+            """UPDATE app.workspaces SET search_index_generation =
+                search_index_generation + 1, updated_at = clock_timestamp(),
+                lock_version = lock_version + 1 WHERE id = %s""",
+            (workspace_id,),
+        )
+        for source_id in source_ids:
             connection.execute(
                 """INSERT INTO app.outbox_events (
                     id, workspace_id, aggregate_type, aggregate_id, event_type, payload
                 ) VALUES (%s, %s, 'source', %s, 'index.source_deleted', %s::JSONB)
                 ON CONFLICT (id) DO NOTHING""",
                 (
-                    uuid5(source_id, "provider-delete"),
+                    uuid5(
+                        source_id,
+                        f"provider-delete:{deletion_versions[source_id]}",
+                    ),
                     workspace_id,
                     source_id,
                     json.dumps({"source_id": str(source_id)}),
                 ),
             )
-            return True
+        return len(active)
 
     def claim(self, worker_id: str, lease_seconds: int = 120) -> ClaimedJob | None:
         with psycopg.connect(self._database_url, row_factory=dict_row) as connection:

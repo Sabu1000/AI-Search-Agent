@@ -43,7 +43,7 @@ async def test_check_readiness_reports_all_dependencies(
 async def test_database_probe_executes_query_and_disposes_engine() -> None:
     connection = AsyncMock()
     result = MagicMock()
-    result.scalar_one.return_value = "0005_gmail_incremental_sync"
+    result.scalar_one.return_value = "0006_gmail_reconciliation"
     connection.execute.return_value = result
     connection_context = MagicMock()
     connection_context.__aenter__ = AsyncMock(return_value=connection)

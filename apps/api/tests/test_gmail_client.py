@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 
 import httpx
@@ -77,6 +78,20 @@ def test_normalize_gmail_message_preserves_stable_searchable_fields() -> None:
         "thread_id": "thread-1",
     }
     assert "access_token" not in repr(document)
+
+
+def test_gmail_normalization_is_deterministic_bounded_and_inert() -> None:
+    message = message_payload("Cafe\u0301\r\nline\x00 with <script>text</script>")
+
+    first = normalize_gmail_documents(deepcopy(message))
+    second = normalize_gmail_documents(deepcopy(message))
+
+    assert first == second
+    assert first[0].content_hash == second[0].content_hash
+    assert "Café\nline with <script>text</script>" in first[0].content
+    assert "\x00" not in first[0].content
+    assert first[0].canonical_url == ("https://mail.google.com/mail/u/0/#all/message-1")
+    assert len(first[0].content.encode()) <= 5_000_000
 
 
 @pytest.mark.asyncio
@@ -329,6 +344,36 @@ async def test_client_refreshes_lists_and_fetches_one_bounded_page() -> None:
 
 
 @pytest.mark.asyncio
+async def test_full_page_tolerates_concurrent_delete_and_rejects_oversized_page() -> (
+    None
+):
+    def deleted_handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/messages"):
+            return httpx.Response(200, json={"messages": [{"id": "gone"}]})
+        return httpx.Response(404)
+
+    client = HttpGmailClient(
+        client_id="client",
+        client_secret="secret",
+        transport=httpx.MockTransport(deleted_handler),
+    )
+    assert (await client.page(access_token="access")).documents == ()
+
+    oversized = HttpGmailClient(
+        client_id="client",
+        client_secret="secret",
+        transport=httpx.MockTransport(
+            lambda _: httpx.Response(
+                200,
+                json={"messages": [{"id": str(index)} for index in range(26)]},
+            )
+        ),
+    )
+    with pytest.raises(MalformedItemError):
+        await oversized.page(access_token="access")
+
+
+@pytest.mark.asyncio
 async def test_client_classifies_authentication_and_rate_limit_failures() -> None:
     def auth_handler(_: httpx.Request) -> httpx.Response:
         return httpx.Response(400, json={"error": "invalid_grant"})
@@ -357,6 +402,17 @@ async def test_client_classifies_authentication_and_rate_limit_failures() -> Non
     with pytest.raises(RateLimitError) as error:
         await limited.history_id("access")
     assert error.value.retry_after_seconds == 7
+
+    invalid_retry_after = HttpGmailClient(
+        client_id="client",
+        client_secret="secret",
+        transport=httpx.MockTransport(
+            lambda _: httpx.Response(429, headers={"Retry-After": "NaN"})
+        ),
+    )
+    with pytest.raises(RateLimitError) as invalid_error:
+        await invalid_retry_after.history_id("access")
+    assert invalid_error.value.retry_after_seconds is None
 
 
 @pytest.mark.asyncio

@@ -8,7 +8,7 @@ from pathlib import Path
 from alembic import command
 from alembic.config import Config
 
-EXPECTED_SCHEMA_REVISION = "0005_gmail_incremental_sync"
+EXPECTED_SCHEMA_REVISION = "0006_gmail_reconciliation"
 
 
 def build_alembic_config() -> Config:
