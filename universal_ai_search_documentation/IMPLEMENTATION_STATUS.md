@@ -35,7 +35,7 @@ shells are never counted as finished user features.
 | `02_SYSTEM_ARCHITECTURE.md` | Complete | Partial | Local topology, schema ordering, fail-closed HTTP boundaries, workspace authentication/authorization, durable Gmail/Drive/selected-GitHub indexing, and hybrid search exist. Desktop sync, model streaming, provider management UI, and remaining product services are open. |
 | `03_SEARCH_ENGINE_DESIGN.md` | Complete | Local-index backend implemented; product phase partial | PostgreSQL exact/FTS/pgvector/trigram retrieval, typed filters, RRF, deterministic ranking, bounded extractive claims/citations, history, and safe empty answers pass unit and local PostgreSQL tests. Signed-in web results support workspace and provider filters. Production semantic/model adapters, full filter and answer UI, evaluation, and cache remain. |
 | `04_DATABASE_SCHEMA.md` | Complete | Database runtime implemented; phase partial | Alembic creates `33/33` specified tables. The runtime adds GitHub authorization and sync migrations to the prior index/Gmail/Drive claim functions and forced RLS. Compose migrates before API startup; readiness checks revision `0009_github_sync_runtime`. Seed data, backup automation, and Phase 3 review remain. |
-| `05_API_SPECIFICATION.md` | Complete | API platform and selected product routes implemented | FastAPI provides OpenAPI 3.1, strict serialization, RFC 9457 problems, signed cursors, idempotency primitives, and workspace authentication. `12/49` catalogued product endpoints exist: six auth, two Google authorization, two GitHub authorization, signed GitHub webhook ingress, and search. Rate limiting, SSE, and remaining operations are open. |
+| `05_API_SPECIFICATION.md` | Complete | API platform and selected product routes implemented | FastAPI provides OpenAPI 3.1, strict serialization, RFC 9457 problems, signed cursors, idempotency primitives, and workspace authentication. `18/49` catalogued product endpoints exist: six auth, two Google authorization, two GitHub authorization, signed GitHub webhook ingress, search, three read-only connection routes, and three private conversation routes. Rate limiting, SSE, and remaining operations are open. |
 | `06_CONNECTOR_FRAMEWORK.md` | Complete | Gmail and selected-root Drive backend phases complete; provider ecosystem partial | The GitHub backend now verifies selected-repository grants, ingests bounded repository and discussion snapshots, reconciles absence after success, and closes visibility on failed verification. Desktop has a bounded scanner core. Live provider checks, native desktop sync, Drive change polling, and shared operational controls remain. |
 | `07_INDEXING_PIPELINE.md` | Complete | Normalized text/Markdown and bounded provider extraction paths implemented | Deterministic chunking/deduplication, local embeddings, durable leases, atomic promotion, unchanged skips and deletion purging pass unit and local PostgreSQL tests. Drive PDF/DOCX/XLSX/PPTX and bounded GitHub repository/discussion data feed the index. Desktop indexing handoff and production embedding providers remain open. |
 | `08_SECURITY_AND_PRIVACY.md` | Complete | Partial controls | The threat model, data classification, tenant/cryptographic boundaries, browser/input/model defenses, audit/redaction policy, deletion/backup rules, and security release gates are implementation-ready. Existing RLS, strict API boundaries, secret validation, and containerized tests implement only part of the required controls. |
@@ -376,6 +376,19 @@ selected-root backend milestone passes its
   send file contents or absolute paths. It fails closed on unsupported
   platforms; native packaging and end-to-end sync are not certified.
 
+### Private connection and conversation metadata
+
+Authenticated workspace members can list and read safe connection metadata and
+status with signed pagination. The API excludes credentials and filesystem
+paths. Private conversations can be created idempotently, listed, and opened
+by their owner with current workspace and session checks. Message append,
+generation, SSE and citation reauthorization remain open.
+
+The desktop scanner also contains an offline Ed25519 contract for
+registration proofs and exact-byte request signatures, verified against
+cross-language fixtures. This is not server-side device registration or
+transport; those gates are open.
+
 ### First offline retrieval evaluation
 
 The [synthetic, versioned evaluation](../apps/api/tests_database/fixtures/SEARCH_EVALUATION.md)
@@ -399,7 +412,7 @@ The following are still open:
 - GitHub individual repository revocation, live acceptance, and operational
   webhook retention and recovery validation.
 - Binary Gmail attachment extraction, OCR, production semantic embeddings,
-  conversations, model synthesis/conflict checks, and streamed answers.
+  model synthesis/conflict checks, conversation messages, and streamed answers.
 - Unimplemented catalogued API operations, connection management, source
   browsing, advanced search filters, and conversation citation lifecycle.
 - Native desktop folder picker, persisted registration/approval, watchers,

@@ -7,7 +7,11 @@ paths exist.
 from fastapi import APIRouter
 
 from universal_ai_search.api.routes.auth import router as auth_router
+from universal_ai_search.api.routes.connection_queries import (
+    router as connection_query_router,
+)
 from universal_ai_search.api.routes.connections import router as connections_router
+from universal_ai_search.api.routes.conversations import router as conversation_router
 from universal_ai_search.api.routes.github_connections import router as github_router
 from universal_ai_search.api.routes.github_webhooks import (
     router as github_webhook_router,
@@ -19,4 +23,6 @@ router.include_router(auth_router)
 router.include_router(connections_router)
 router.include_router(github_router)
 router.include_router(github_webhook_router)
+router.include_router(connection_query_router)
+router.include_router(conversation_router)
 router.include_router(search_router)

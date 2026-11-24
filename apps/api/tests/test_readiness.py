@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from universal_ai_search.config import Settings
+from universal_ai_search.database.schema import EXPECTED_SCHEMA_REVISION
 from universal_ai_search.platform.readiness import (
     _probe_database,
     _probe_object_storage,
@@ -43,7 +44,7 @@ async def test_check_readiness_reports_all_dependencies(
 async def test_database_probe_executes_query_and_disposes_engine() -> None:
     connection = AsyncMock()
     result = MagicMock()
-    result.scalar_one.return_value = "0007_drive_sync_runtime"
+    result.scalar_one.return_value = EXPECTED_SCHEMA_REVISION
     connection.execute.return_value = result
     connection_context = MagicMock()
     connection_context.__aenter__ = AsyncMock(return_value=connection)

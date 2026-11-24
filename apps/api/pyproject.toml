@@ -70,6 +70,8 @@ testpaths = ["tests"]
 omit = [
   "*/universal_ai_search/auth/store.py",
   "*/universal_ai_search/connections/store.py",
+  "*/universal_ai_search/conversations/repository.py",
+  "*/universal_ai_search/connections/query.py",
   "*/universal_ai_search/connections/github_store.py",
   "*/universal_ai_search/connections/github_event_store.py",
   "*/universal_ai_search/sync/drive_repository.py",

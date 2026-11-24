@@ -5,6 +5,8 @@
 use std::path::Path;
 use std::time::SystemTime;
 
+pub mod device_signing;
+
 #[cfg(feature = "persistent-manifest")]
 pub mod manifest;
 #[cfg(unix)]

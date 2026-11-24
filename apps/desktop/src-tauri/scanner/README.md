@@ -51,3 +51,65 @@ From `apps/desktop/src-tauri`:
 cargo fmt --all --check
 cargo test --locked -p uas-desktop-scanner
 ```
+
+## Offline device signatures (v1)
+
+This module provides Ed25519 possession proof and exact-request signing only.
+It never reads the keychain, exports a private key, persists generated keys,
+stores device credentials, consumes nonces, or makes network requests.
+Production key import must come from the trusted desktop process's OS
+keychain. Never invoke these entry points directly from the renderer.
+
+A transcript consists of the ASCII fields below, in order, separated by one
+LF byte. There is **no** trailing LF. UUIDs are nonzero, lowercase canonical
+hyphenated strings. Sign the complete transcript bytes with regular Ed25519
+(not a prehashed Ed25519 variant). Public keys and signatures are raw
+32- and 64-byte values encoded as unpadded base64url.
+
+Registration proof:
+
+```text
+uas-device-registration-v1
+<challenge UUID>
+<32 raw challenge bytes, unpadded base64url>
+<32 raw public-key bytes, unpadded base64url>
+```
+
+The server must resolve the challenge UUID to a single-use, unexpired
+challenge bound to the initiating authenticated user and workspace. The
+proof is not itself a device credential.
+
+Device requests:
+
+```text
+uas-device-request-v1
+POST
+<canonical /v1/devices/{device UUID}/{endpoint}>
+<X-Device-Timestamp>
+<X-Device-Nonce>
+<Content-Digest>
+<X-Request-ID>
+```
+
+- Only `heartbeat`, `manifests`, `uploads:sign`, and `changes` are allowed;
+  no query, encoded path, alternate method, or trailing slash.
+- `X-Device-Timestamp` is exactly `YYYY-MM-DDTHH:MM:SSZ`. Verification permits
+  at most five minutes of skew in either direction.
+- The signer generates a 16-byte CSPRNG nonce; verification accepts
+  16–32 bytes encoded canonically in unpadded base64url.
+- `Content-Digest` is `sha-256=:<standard padded base64>:`, following RFC
+  9530, computed over the exact unmodified request bytes (maximum 2 MB).
+- Put the signature in `X-Device-Signature`. The distinct
+  `Authorization: Device <opaque credential>` is attached only by transport.
+  The server must authenticate the credential, resolve the registered public
+  key for that exact device, and atomically consume the nonce after verification.
+
+The committed vector uses an intentionally public test seed and a synthetic
+manifest. Both Rust and Python's `cryptography` verify the same keys,
+transcripts and signatures. To repeat the cross-language check from
+`apps/desktop/src-tauri` with the backend dependencies installed:
+
+```sh
+cargo test --locked -p uas-desktop-scanner
+python scanner/fixtures/verify_ed25519_v1.py
+```

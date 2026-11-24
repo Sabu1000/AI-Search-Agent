@@ -78,6 +78,11 @@ def test_openapi_is_31_and_only_completed_product_routes_are_open() -> None:
         "/v1/connections/github/authorize",
         "/v1/connections/github/callback",
         "/v1/webhooks/github",
+        "/v1/connections",
+        "/v1/connections/{connection_id}",
+        "/v1/connections/{connection_id}/status",
+        "/v1/conversations",
+        "/v1/conversations/{conversation_id}",
         "/v1/search",
     }
 

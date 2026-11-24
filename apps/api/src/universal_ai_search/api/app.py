@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from universal_ai_search import __version__
 from universal_ai_search.api.context import RequestContextMiddleware
+from universal_ai_search.api.pagination import CursorSigner
 from universal_ai_search.api.problems import install_problem_handlers
 from universal_ai_search.api.routes.health import router as health_router
 from universal_ai_search.api.routes.v1 import router as v1_router
@@ -27,8 +28,10 @@ from universal_ai_search.connections.github_event_store import (
 from universal_ai_search.connections.github_service import GitHubConnectionService
 from universal_ai_search.connections.github_store import SQLAlchemyGitHubConnectionStore
 from universal_ai_search.connections.google import HttpGoogleGateway
+from universal_ai_search.connections.query import SQLAlchemyConnectionQueryReader
 from universal_ai_search.connections.service import GoogleConnectionService
 from universal_ai_search.connections.store import SQLAlchemyGoogleConnectionStore
+from universal_ai_search.conversations.repository import ConversationRepository
 from universal_ai_search.search.repository import SearchRepository
 from universal_ai_search.search.service import SearchService
 
@@ -77,6 +80,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         service
     )
     app.state.search_service = SearchService(SearchRepository(engine))
+    app.state.connection_query_reader = SQLAlchemyConnectionQueryReader(engine)
+    app.state.connection_cursor_signer = CursorSigner(
+        runtime_settings.cursor_signing_key.get_secret_value().encode()
+    )
+    app.state.conversation_repository = ConversationRepository(engine)
+    app.state.conversation_cursor_signer = CursorSigner(
+        runtime_settings.cursor_signing_key.get_secret_value().encode()
+    )
+    app.state.conversation_idempotency_key = (
+        runtime_settings.idempotency_hash_key.get_secret_value().encode()
+    )
     app.state.google_connection_service = GoogleConnectionService(
         store=SQLAlchemyGoogleConnectionStore(engine),
         gateway=HttpGoogleGateway(
@@ -127,6 +141,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_origins=[runtime_settings.web_origin],
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "DELETE"],
+        expose_headers=["ETag"],
         allow_headers=[
             "Authorization",
             "Content-Type",
