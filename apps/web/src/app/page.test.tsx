@@ -24,16 +24,27 @@ describe("HomePage", () => {
   it("shows search only when a verified session is restored", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue({
+      vi.fn().mockImplementation(async (url: string) => ({
         ok: true,
-        json: async () => ({
-          user: { id: "a", full_name: "Sabu", email: "user@example.test", email_verified: true },
-          memberships: [{ workspace_id: "b", name: "Workspace", role: "owner", status: "active" }],
-          preferred_workspace_id: "b",
-        }),
-      }),
+        json: async () =>
+          url.includes("/v1/connections?")
+            ? { items: [], page: { has_more: false, next_cursor: null } }
+            : {
+                user: {
+                  id: "a",
+                  full_name: "Sabu",
+                  email: "user@example.test",
+                  email_verified: true,
+                },
+                memberships: [
+                  { workspace_id: "b", name: "Workspace", role: "owner", status: "active" },
+                ],
+                preferred_workspace_id: "b",
+              },
+      })),
     );
     render(<HomePage />);
     expect(await screen.findByRole("searchbox", { name: "Search query" })).toBeInTheDocument();
+    expect(await screen.findByText("No connections yet in Workspace.")).toBeInTheDocument();
   });
 });

@@ -11,18 +11,30 @@ from universal_ai_search.api.routes.connection_queries import (
     router as connection_query_router,
 )
 from universal_ai_search.api.routes.connections import router as connections_router
+from universal_ai_search.api.routes.conversation_deletion import (
+    operations_router as conversation_operations_router,
+)
+from universal_ai_search.api.routes.conversation_deletion import (
+    router as conversation_delete_router,
+)
 from universal_ai_search.api.routes.conversations import router as conversation_router
 from universal_ai_search.api.routes.github_connections import router as github_router
 from universal_ai_search.api.routes.github_webhooks import (
     router as github_webhook_router,
 )
+from universal_ai_search.api.routes.password_recovery import (
+    router as password_recovery_router,
+)
 from universal_ai_search.api.routes.search import router as search_router
 
 router = APIRouter(prefix="/v1")
 router.include_router(auth_router)
+router.include_router(password_recovery_router)
 router.include_router(connections_router)
 router.include_router(github_router)
 router.include_router(github_webhook_router)
 router.include_router(connection_query_router)
 router.include_router(conversation_router)
+router.include_router(conversation_delete_router)
+router.include_router(conversation_operations_router)
 router.include_router(search_router)

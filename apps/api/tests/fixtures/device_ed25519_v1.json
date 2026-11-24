@@ -1,0 +1,23 @@
+{
+  "note": "PUBLIC SYNTHETIC TEST VECTOR. Do not use this seed in an installation.",
+  "seed_hex": "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60",
+  "public_key": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+  "registration": {
+    "challenge_hex": "7171717171717171717171717171717171717171717171717171717171717171",
+    "challenge_id": "018f4fa1-dbbc-77c3-bb8a-1fe08cf626aa",
+    "message": "uas-device-registration-v1\n018f4fa1-dbbc-77c3-bb8a-1fe08cf626aa\ncXFxcXFxcXFxcXFxcXFxcXFxcXFxcXFxcXFxcXFxcXE\n11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+    "signature": "xZFqUNiaup7pNiaXrpxHtvKpj3rJ9itUGE5JPgJhQCDnl9A9DhXecT6SDlb-S7AIKv_Ltg3h9BSHtQ604in-AA"
+  },
+  "request": {
+    "device_id": "018f4fa2-6ccd-77f1-aa96-9d43f85b93de",
+    "request_id": "018f4fa3-3d41-7486-a5dc-f49b976c2400",
+    "path": "/v1/devices/018f4fa2-6ccd-77f1-aa96-9d43f85b93de/manifests",
+    "timestamp": "2026-11-24T17:45:00Z",
+    "nonce_hex": "000102030405060708090a0b0c0d0e0f",
+    "nonce": "AAECAwQFBgcICQoLDA0ODw",
+    "content_digest": "sha-256=:0GRr+f2f/K0PrjAzDbSl/EdOrFaCQxCWpQh/XptDh4c=:",
+    "body": "{\"manifest_id\":\"018f4fa4-10a8-7869-86f0-a0f9236b583b\",\"folder_id\":\"018f4fa4-1aba-744c-9eae-65762253fb14\",\"sequence\":0,\"final\":true,\"entries\":[]}",
+    "message": "uas-device-request-v1\nPOST\n/v1/devices/018f4fa2-6ccd-77f1-aa96-9d43f85b93de/manifests\n2026-11-24T17:45:00Z\nAAECAwQFBgcICQoLDA0ODw\nsha-256=:0GRr+f2f/K0PrjAzDbSl/EdOrFaCQxCWpQh/XptDh4c=:\n018f4fa3-3d41-7486-a5dc-f49b976c2400",
+    "signature": "7tLK_WllhYbQLGgbfQaG9kWpjfZKmiDd5wlUYua_iRGVVyQhSNBQnFTgxS6U5j_Db7qxAMob4u3RaItwGYz5DQ"
+  }
+}

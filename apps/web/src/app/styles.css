@@ -408,3 +408,39 @@ button.primary:not(:disabled) {
 .githubContinue {
   color: var(--accent);
 }
+
+.connectionList {
+  display: grid;
+  gap: 0.75rem;
+  margin: 1rem 0;
+  padding: 0;
+  list-style: none;
+}
+
+.connectionItem {
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+.connectionItem h3 {
+  margin: 0 0 0.4rem;
+}
+
+.connectionItem p {
+  margin: 0.3rem 0;
+}
+
+.connectionActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.connectionActions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}

@@ -127,7 +127,9 @@ class AuthenticationService:
             raise AuthenticationFailure
         if self.password_security.needs_rehash(identity.password_hash or ""):
             await self.store.update_password_hash(
-                identity.user_id, self.password_security.hash(password)
+                identity.user_id,
+                self.password_security.hash(password),
+                expected_version=identity.authorization_version,
             )
         return await self._new_session(
             user_id=identity.user_id,
@@ -147,7 +149,7 @@ class AuthenticationService:
         refresh_token = random_token()
         csrf_token = random_token()
         expires_at = datetime.now(UTC) + timedelta(days=30)
-        await self.store.create_session(
+        created = await self.store.create_session(
             session_id=session_id,
             user_id=user_id,
             family_id=family_id,
@@ -157,6 +159,8 @@ class AuthenticationService:
             expires_at=expires_at,
             device_metadata=device_metadata,
         )
+        if not created:
+            raise AuthenticationFailure
         access_token, access_expiry = self.token_codec.issue(
             user_id=user_id,
             session_id=session_id,

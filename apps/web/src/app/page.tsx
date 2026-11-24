@@ -2,6 +2,7 @@
 
 import { type FormEvent, useEffect, useState } from "react";
 
+import { ConnectionPanel } from "./connection-panel";
 import { GitHubConnect } from "./github-connect";
 import { SearchPanel } from "./search-panel";
 
@@ -221,6 +222,12 @@ export default function HomePage() {
       {session?.user.email_verified && (
         <>
           <SearchPanel
+            apiUrl={apiUrl}
+            memberships={session.memberships}
+            preferredWorkspaceId={session.preferred_workspace_id}
+          />
+          <ConnectionPanel
+            key={session.user.id}
             apiUrl={apiUrl}
             memberships={session.memberships}
             preferredWorkspaceId={session.preferred_workspace_id}

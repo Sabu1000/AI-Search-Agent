@@ -90,7 +90,9 @@ class AuthStore(Protocol):
 
     async def login_identity(self, email: str) -> LoginIdentity | None: ...
 
-    async def update_password_hash(self, user_id: UUID, password_hash: str) -> None: ...
+    async def update_password_hash(
+        self, user_id: UUID, password_hash: str, *, expected_version: int
+    ) -> None: ...
 
     async def create_session(
         self,
@@ -103,7 +105,7 @@ class AuthStore(Protocol):
         authorization_version: int,
         expires_at: datetime,
         device_metadata: dict[str, str],
-    ) -> None: ...
+    ) -> bool: ...
 
     async def rotate_session(
         self,
@@ -198,15 +200,22 @@ class SQLAlchemyAuthStore:
             )
         return LoginIdentity(**row) if row else None
 
-    async def update_password_hash(self, user_id: UUID, password_hash: str) -> None:
+    async def update_password_hash(
+        self, user_id: UUID, password_hash: str, *, expected_version: int
+    ) -> None:
         async with self._engine.begin() as connection:
             await _set_user_context(connection, user_id)
             await connection.execute(
                 text(
                     "UPDATE app.users SET password_hash = :password_hash, "
-                    "updated_at = clock_timestamp() WHERE id = :user_id"
+                    "updated_at = clock_timestamp() WHERE id = :user_id "
+                    "AND lock_version = :expected_version"
                 ),
-                {"password_hash": password_hash, "user_id": user_id},
+                {
+                    "password_hash": password_hash,
+                    "user_id": user_id,
+                    "expected_version": expected_version,
+                },
             )
 
     async def create_session(
@@ -220,9 +229,19 @@ class SQLAlchemyAuthStore:
         authorization_version: int,
         expires_at: datetime,
         device_metadata: dict[str, str],
-    ) -> None:
+    ) -> bool:
         async with self._engine.begin() as connection:
             await _set_user_context(connection, user_id)
+            current = await connection.scalar(
+                text(
+                    """SELECT 1 FROM app.users WHERE id = :user_id
+                       AND lock_version = :version AND status = 'active'
+                       AND email_verified_at IS NOT NULL FOR SHARE"""
+                ),
+                {"user_id": user_id, "version": authorization_version},
+            )
+            if current is None:
+                return False
             await connection.execute(
                 text(
                     """INSERT INTO app.sessions (
@@ -246,6 +265,7 @@ class SQLAlchemyAuthStore:
                     "device_metadata": json.dumps(device_metadata),
                 },
             )
+            return True
 
     async def rotate_session(
         self,

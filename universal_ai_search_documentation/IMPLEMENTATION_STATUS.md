@@ -35,11 +35,11 @@ shells are never counted as finished user features.
 | `02_SYSTEM_ARCHITECTURE.md` | Complete | Partial | Local topology, schema ordering, fail-closed HTTP boundaries, workspace authentication/authorization, durable Gmail/Drive/selected-GitHub indexing, and hybrid search exist. Desktop sync, model streaming, provider management UI, and remaining product services are open. |
 | `03_SEARCH_ENGINE_DESIGN.md` | Complete | Local-index backend implemented; product phase partial | PostgreSQL exact/FTS/pgvector/trigram retrieval, typed filters, RRF, deterministic ranking, bounded extractive claims/citations, history, and safe empty answers pass unit and local PostgreSQL tests. Signed-in web results support workspace and provider filters. Production semantic/model adapters, full filter and answer UI, evaluation, and cache remain. |
 | `04_DATABASE_SCHEMA.md` | Complete | Database runtime implemented; phase partial | Alembic creates `33/33` specified tables. The runtime adds GitHub authorization and sync migrations to the prior index/Gmail/Drive claim functions and forced RLS. Compose migrates before API startup; readiness checks revision `0009_github_sync_runtime`. Seed data, backup automation, and Phase 3 review remain. |
-| `05_API_SPECIFICATION.md` | Complete | API platform and selected product routes implemented | FastAPI provides OpenAPI 3.1, strict serialization, RFC 9457 problems, signed cursors, idempotency primitives, and workspace authentication. `18/49` catalogued product endpoints exist: six auth, two Google authorization, two GitHub authorization, signed GitHub webhook ingress, search, three read-only connection routes, and three private conversation routes. Rate limiting, SSE, and remaining operations are open. |
+| `05_API_SPECIFICATION.md` | Complete | API platform and selected product routes implemented | FastAPI provides OpenAPI 3.1, strict serialization, RFC 9457 problems, signed cursors, idempotency primitives, and workspace authentication. `22/49` catalogued product operations include application and recovery auth, Google/GitHub authorization, signed GitHub webhook ingress, search, safe connection reads, and private conversation management. Rate limiting, SSE, and remaining operations are open. |
 | `06_CONNECTOR_FRAMEWORK.md` | Complete | Gmail and selected-root Drive backend phases complete; provider ecosystem partial | The GitHub backend now verifies selected-repository grants, ingests bounded repository and discussion snapshots, reconciles absence after success, and closes visibility on failed verification. Desktop has a bounded scanner core. Live provider checks, native desktop sync, Drive change polling, and shared operational controls remain. |
 | `07_INDEXING_PIPELINE.md` | Complete | Normalized text/Markdown and bounded provider extraction paths implemented | Deterministic chunking/deduplication, local embeddings, durable leases, atomic promotion, unchanged skips and deletion purging pass unit and local PostgreSQL tests. Drive PDF/DOCX/XLSX/PPTX and bounded GitHub repository/discussion data feed the index. Desktop indexing handoff and production embedding providers remain open. |
 | `08_SECURITY_AND_PRIVACY.md` | Complete | Partial controls | The threat model, data classification, tenant/cryptographic boundaries, browser/input/model defenses, audit/redaction policy, deletion/backup rules, and security release gates are implementation-ready. Existing RLS, strict API boundaries, secret validation, and containerized tests implement only part of the required controls. |
-| `09_AUTH_AND_OAUTH.md` | Complete | Application authentication and provider authorization slices implemented | Google uses single-use callbacks, PKCE S256, exact read-only scopes, envelope-encrypted credentials, and worker-side refresh. The GitHub App path verifies workspace/session state, installation and repository access, and persists grants without provider tokens. Password recovery, reauthentication, Google login, live GitHub authorization, revocation, production KMS, throttling, and full security review remain. |
+| `09_AUTH_AND_OAUTH.md` | Complete | Application authentication and provider authorization slices implemented | Google uses single-use callbacks, PKCE S256, exact read-only scopes, envelope-encrypted credentials, and worker-side refresh. The GitHub App path verifies workspace/session state, installation and repository access, and persists grants without provider tokens. Reauthentication, Google login, live GitHub authorization, revocation, production KMS, throttling, and full security review remain. |
 
 The active implementation slice is provider and desktop integration through
 backfill `B7`. The tested Gmail backend phase is complete, including Google
@@ -381,8 +381,19 @@ selected-root backend milestone passes its
 Authenticated workspace members can list and read safe connection metadata and
 status with signed pagination. The API excludes credentials and filesystem
 paths. Private conversations can be created idempotently, listed, and opened
-by their owner with current workspace and session checks. Message append,
-generation, SSE and citation reauthorization remain open.
+by their owner with current workspace and session checks. Confirmed deletion
+clears private messages and citations and provides an owner-only operation
+receipt; shared sources are unaffected. A private user-turn persistence
+adapter exists, but no public message append/generation or SSE is wired.
+
+Opt-in password recovery uses rate-limited generic requests and hashed,
+expiring one-time tokens; a valid reset revokes all session families
+atomically. Synthetic mail and PostgreSQL tests do not certify production
+SMTP or Redis operation.
+
+The grounding boundary packs bounded untrusted snippets and accepts only
+strict, still-authorized citation references. It makes no model request and
+does not verify semantic entailment. The converse/model path remains open.
 
 The desktop scanner also contains an offline Ed25519 contract for
 registration proofs and exact-byte request signatures, verified against
@@ -405,7 +416,7 @@ embeddings and live provider baselines remain open.
 The following are still open:
 
 - A general ORM model layer, seed data, and automated database backups.
-- Password recovery, reauthentication, Google login, production KMS, auth
+- Reauthentication, Google login, production KMS, auth
   abuse throttling, and account profile editing.
 - Incremental Drive change-token polling; Gmail/Drive connection UI and
   live provider smoke tests.

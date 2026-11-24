@@ -1,8 +1,10 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import cast
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from universal_ai_search import __version__
@@ -16,6 +18,16 @@ from universal_ai_search.auth.backends import (
     SessionAuthenticationBackend,
 )
 from universal_ai_search.auth.email import SMTPVerificationSender
+from universal_ai_search.auth.recovery import PasswordRecoveryService
+from universal_ai_search.auth.recovery_email import (
+    BoundedRecoveryMailQueue,
+    SMTPRecoveryMailer,
+)
+from universal_ai_search.auth.recovery_limiter import (
+    RedisRecoveryRequestLimiter,
+    RedisScriptClient,
+)
+from universal_ai_search.auth.recovery_store import SQLAlchemyRecoveryStore
 from universal_ai_search.auth.security import AccessTokenCodec, PasswordSecurity
 from universal_ai_search.auth.service import AuthenticationService
 from universal_ai_search.auth.store import SQLAlchemyAuthStore
@@ -31,6 +43,7 @@ from universal_ai_search.connections.google import HttpGoogleGateway
 from universal_ai_search.connections.query import SQLAlchemyConnectionQueryReader
 from universal_ai_search.connections.service import GoogleConnectionService
 from universal_ai_search.connections.store import SQLAlchemyGoogleConnectionStore
+from universal_ai_search.conversations.deletion import ConversationDeletionStore
 from universal_ai_search.conversations.repository import ConversationRepository
 from universal_ai_search.search.repository import SearchRepository
 from universal_ai_search.search.service import SearchService
@@ -39,6 +52,12 @@ from universal_ai_search.search.service import SearchService
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     yield
+    recovery_mail = getattr(app.state, "recovery_mail", None)
+    if isinstance(recovery_mail, BoundedRecoveryMailQueue):
+        await recovery_mail.drain()
+    recovery_redis = getattr(app.state, "recovery_redis", None)
+    if isinstance(recovery_redis, Redis):
+        await recovery_redis.aclose()
     engine = getattr(app.state, "database_engine", None)
     if isinstance(engine, AsyncEngine):
         await engine.dispose()
@@ -73,6 +92,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ),
         web_origin=runtime_settings.web_origin,
     )
+    app.state.password_recovery_service = None
+    if runtime_settings.password_recovery_enabled:
+        redis = Redis.from_url(runtime_settings.redis_url, socket_timeout=2)
+        mail_queue = BoundedRecoveryMailQueue(
+            SMTPRecoveryMailer(
+                host=runtime_settings.smtp_host,
+                port=runtime_settings.smtp_port,
+                sender=runtime_settings.email_from,
+                require_starttls=runtime_settings.environment not in {"local", "test"},
+            )
+        )
+        app.state.recovery_mail = mail_queue
+        app.state.recovery_redis = redis
+        app.state.password_recovery_service = PasswordRecoveryService(
+            store=SQLAlchemyRecoveryStore(engine),
+            security=PasswordSecurity(),
+            limiter=RedisRecoveryRequestLimiter(cast(RedisScriptClient, redis)),
+            mail=mail_queue,
+            token_hash_key=runtime_settings.auth_hash_key.get_secret_value().encode(),
+            web_origin=runtime_settings.web_origin,
+        )
     app.state.database_engine = engine
     app.state.authentication_service = service
     app.state.authentication_backend = SessionAuthenticationBackend(service)
@@ -85,6 +125,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         runtime_settings.cursor_signing_key.get_secret_value().encode()
     )
     app.state.conversation_repository = ConversationRepository(engine)
+    app.state.conversation_deletion_store = ConversationDeletionStore(
+        engine,
+        idempotency_secret=(
+            runtime_settings.idempotency_hash_key.get_secret_value().encode()
+        ),
+        audit_secret=runtime_settings.auth_hash_key.get_secret_value().encode(),
+    )
     app.state.conversation_cursor_signer = CursorSigner(
         runtime_settings.cursor_signing_key.get_secret_value().encode()
     )
@@ -147,6 +194,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "Content-Type",
             "Idempotency-Key",
             "X-CSRF-Token",
+            "X-Confirm-Action",
             "X-Request-ID",
             "X-Workspace-ID",
         ],
