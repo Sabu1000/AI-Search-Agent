@@ -69,6 +69,13 @@ from universal_ai_search.devices.registration_store import (
     SQLAlchemyDeviceRegistrationStore,
 )
 from universal_ai_search.devices.revocation import DeviceRevocationStore
+from universal_ai_search.devices.upload_completion import (
+    DeviceUploadCompletion,
+    ImmutableStageReader,
+)
+from universal_ai_search.devices.upload_completion_store import (
+    SQLAlchemyUploadCompletionStore,
+)
 from universal_ai_search.devices.upload_signer import VerifiedS3UploadSigner
 from universal_ai_search.devices.upload_store import SQLAlchemyDeviceUploadStore
 from universal_ai_search.devices.uploads import DeviceUploadAuthorization
@@ -101,6 +108,7 @@ def create_app(
     settings: Settings | None = None,
     *,
     device_upload_signer: VerifiedS3UploadSigner | None = None,
+    device_upload_stage_reader: ImmutableStageReader | None = None,
 ) -> FastAPI:
     runtime_settings = settings or get_settings()
     app = FastAPI(
@@ -225,6 +233,7 @@ def create_app(
     app.state.device_manifest_service = None
     app.state.device_upload_signer = None
     app.state.device_upload_authorization = None
+    app.state.device_upload_completion = None
     if runtime_settings.desktop_registration_enabled:
         registration_key = runtime_settings.auth_hash_key.get_secret_value().encode()
         app.state.device_registration_service = DeviceRegistrationService(
@@ -238,6 +247,15 @@ def create_app(
             app.state.device_upload_signer = device_upload_signer
             app.state.device_upload_authorization = DeviceUploadAuthorization(
                 SQLAlchemyDeviceUploadStore(engine), hash_key=registration_key
+            )
+        if (
+            app.state.device_upload_signer is not None
+            and device_upload_stage_reader is not None
+        ):
+            app.state.device_upload_completion = DeviceUploadCompletion(
+                SQLAlchemyUploadCompletionStore(engine),
+                reader=device_upload_stage_reader,
+                hash_key=registration_key,
             )
         app.state.device_manifest_service = DeviceManifestService(
             SQLAlchemyDeviceManifestStore(engine), hash_key=registration_key

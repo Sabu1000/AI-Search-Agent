@@ -731,7 +731,33 @@ Signed-upload requests bind `upload_id`, device, workspace, source external ID,
 opaque object key, exact byte size, SHA-256 digest, MIME type, and expiry. URLs
 expire within ten minutes, permit one `PUT`, and include required digest and
 content-type headers. Object-store success alone never makes content searchable;
-`changes` completion validates object metadata and creates an indexing operation.
+`changes` completion validates object metadata before any indexing operation can
+run. The bounded staging implementation of `POST /v1/devices/{device_id}/changes`
+accepts only exact signed JSON of the following shape:
+
+```json
+{
+  "change_batch_id": "018f4f61-9910-7244-a4c7-232bd3b4c553",
+  "upload_ids": ["018f4f61-9910-7244-a4c7-232bd3b4c554"]
+}
+```
+
+Only one completed text, Markdown, or CSV upload per batch is supported. An
+identical batch ID with a new valid request nonce returns its existing receipt;
+reusing a nonce or moving an upload to another batch is rejected. Object keys,
+storage version IDs, content metadata overrides, multi-upload batches, and
+client-supplied indexing state are not accepted. The staging stage returns a
+202 `device_upload_index` operation with `indexed_uploads` progress. This
+acknowledgment starts pending; the owner polls its private operation until the
+worker has indexed the file. Only bounded UTF-8 text, Markdown and CSV up to
+512 KiB currently become searchable. Other cases fail with a safe operation
+error rather than being reported as indexed. Verification requires a
+versioned, write-once staging bucket and a separate read-only principal. It
+compares exact size, MIME and provider-verified full-object SHA-256, then pins
+and re-verifies the same version. ETag or an unversioned object is not a
+substitute. Verification is allowed within five minutes after the signed PUT
+grant expires, but it never extends that grant. Both routes currently require
+explicit staging setup on a test host and are disabled in the normal runtime.
 
 Heartbeat contains app version, platform, and aggregate queue state only. It
 does not send file lists or absolute paths. Device deletion requires

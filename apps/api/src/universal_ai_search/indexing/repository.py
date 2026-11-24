@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass
 from enum import StrEnum
@@ -11,7 +12,7 @@ from uuid import UUID, uuid5
 
 import psycopg
 from psycopg.rows import dict_row
-from uas_connector_sdk import NormalizedDocument
+from uas_connector_sdk import NormalizedDocument, Provider
 
 from .pipeline import (
     CHUNKER_VERSION,
@@ -107,8 +108,14 @@ class IndexRepository:
         workspace_id: UUID,
         connection_id: UUID,
         document: NormalizedDocument,
+        *,
+        version_scope: bytes | None = None,
     ) -> EnqueueResult:
         """Enqueue inside a trusted worker RLS transaction and held claim."""
+        if version_scope is not None and (
+            document.provider is not Provider.LOCAL_FILES or len(version_scope) != 16
+        ):
+            raise ValueError("version scope is reserved for an immutable native upload")
         content_hash = bytes.fromhex(document.content_hash)
         permissions_hash = bytes.fromhex(document.permissions_hash)
         source_id = uuid5(connection_id, document.external_id)
@@ -140,6 +147,10 @@ class IndexRepository:
             permissions_hash=permissions_hash,
             profile_id=profile_id,
         )
+        if version_scope is not None:
+            key = hashlib.sha256(
+                b"native-stage-version-v1:" + key + version_scope
+            ).digest()
         base_version_id = document_version_id(source_id, key)
         prior = connection.execute(
             """SELECT state, lock_version FROM app.sources
@@ -575,6 +586,7 @@ class IndexRepository:
         with psycopg.connect(self._database_url, row_factory=dict_row) as connection:
             self._set_worker_context(connection, claim.workspace_id)
             require_current_reindex(connection, claim)
+            self._require_staged_upload_scope(connection, claim, publishing=False)
             row = connection.execute(
                 """SELECT version.workspace_id, version.source_id,
                     version.id AS document_version_id, source.title,
@@ -640,6 +652,7 @@ class IndexRepository:
                 raise IndexingError("INDEX_PROMOTION_CONFLICT")
 
             require_current_reindex(connection, claim, promoting=True)
+            self._require_staged_upload_scope(connection, claim, publishing=True)
             profile_id = self._profile_id(connection, claim.document_version_id)
             for chunk in prepared.chunks:
                 connection.execute(
@@ -752,6 +765,32 @@ class IndexRepository:
                     updated_at = clock_timestamp() WHERE id = %s""",
                 (claim.job_id,),
             )
+
+    @staticmethod
+    def _require_staged_upload_scope(
+        connection: psycopg.Connection[dict[str, object]],
+        claim: ClaimedJob,
+        *,
+        publishing: bool,
+    ) -> None:
+        # No staged native asset can enter or leave the real indexing
+        # worker under a stale workspace, device, folder, or upload receipt.
+        allowed = connection.execute(
+            """SELECT CASE WHEN s.provider = 'local_files'
+                         AND s.metadata ? 'local_upload_id'
+                       THEN app.verify_staged_source_index_scope(%s,%s,%s)
+                       ELSE TRUE END AS allowed
+               FROM app.sources s WHERE s.workspace_id=%s AND s.id=%s""",
+            (
+                claim.job_id,
+                claim.workspace_id,
+                publishing,
+                claim.workspace_id,
+                claim.source_id,
+            ),
+        ).fetchone()
+        if allowed is None or allowed["allowed"] is not True:
+            raise IndexingError("AUTHORIZATION_CHANGED")
 
     @staticmethod
     def _profile_id(

@@ -215,7 +215,7 @@ class DeviceRevocationStore:
                      WHERE v.workspace_id=:workspace
                        AND v.source_id=ANY(CAST(:sources AS UUID[]))
                        AND v.object_storage_key IS NOT NULL
-                   ) AS external_content,
+                   ) OR app.device_has_staged_upload(:target) AS external_content,
                    EXISTS (
                      SELECT 1 FROM app.jobs j WHERE j.workspace_id=:workspace
                        AND (j.connection_id=:connection

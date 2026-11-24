@@ -3,6 +3,7 @@ import json
 import socket
 import time
 from collections.abc import Sequence
+from typing import Protocol
 
 from universal_ai_search import __version__
 from universal_ai_search.config import get_settings
@@ -47,7 +48,15 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+class NativeUploadIndexer(Protocol):
+    def run_once(self, worker_id: str) -> bool: ...
+
+
+def main(
+    argv: Sequence[str] | None = None,
+    *,
+    native_upload_indexer: NativeUploadIndexer | None = None,
+) -> int:
     arguments = build_parser().parse_args(argv)
     settings = get_settings()
     if arguments.check:
@@ -117,6 +126,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             sync_runtime.run_once(worker_id)
             or drive_sync_runtime.run_once(worker_id)
             or (github_runtime is not None and github_runtime.run_once(worker_id))
+            or (
+                native_upload_indexer is not None
+                and native_upload_indexer.run_once(worker_id)
+            )
         ):
             runtime.run_once(worker_id)
         return 0
@@ -126,8 +139,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         github_synced = github_runtime is not None and github_runtime.run_once(
             worker_id
         )
+        native_indexed = (
+            native_upload_indexer is not None
+            and native_upload_indexer.run_once(worker_id)
+        )
         indexed = runtime.run_once(worker_id)
-        consumed = synced or drive_synced or github_synced or indexed
+        consumed = synced or drive_synced or github_synced or native_indexed or indexed
         if not consumed:
             time.sleep(arguments.poll_interval)
 
