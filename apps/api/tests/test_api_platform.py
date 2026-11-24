@@ -75,6 +75,8 @@ def test_openapi_is_31_and_only_completed_product_routes_are_open() -> None:
         "/v1/auth/me",
         "/v1/connections/google/authorize",
         "/v1/connections/google/callback",
+        "/v1/connections/github/authorize",
+        "/v1/connections/github/callback",
         "/v1/search",
     }
 

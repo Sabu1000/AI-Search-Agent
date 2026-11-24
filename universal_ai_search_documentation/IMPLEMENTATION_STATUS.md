@@ -334,9 +334,11 @@ The first `P7-001` slice adds a GitHub App HTTP gateway with PKCE code
 exchange, selected-installation and user repository checks, and in-memory
 short-lived installation tokens restricted to explicit repository IDs and
 read-only permissions. Synthetic provider tests exercise the gateway.
-The start/callback routes, single-use state and workspace binding, durable
-repository grants, and provider integration tests remain open. No live GitHub
-App credentials or unsolicited repository access are required for these tests.
+The opt-in start/callback routes, encrypted single-use workspace/session
+state, and audited PostgreSQL repository grants now exist. A verified
+connection is saved as pending and carries no provider token. No live
+GitHub App credentials are required for the synthetic tests. Live sandbox
+verification and the sync/reconciliation handoff are still open.
 
 ## Explicitly unimplemented inventory
 

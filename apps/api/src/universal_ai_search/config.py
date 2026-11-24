@@ -40,6 +40,13 @@ class Settings(BaseSettings):
     google_client_id: str = ""
     google_client_secret: SecretStr = SecretStr("")
     google_redirect_uri: str = "http://localhost:8000/v1/connections/google/callback"
+    github_app_enabled: bool = False
+    github_app_id: int = 0
+    github_app_slug: str = ""
+    github_client_id: str = ""
+    github_client_secret: SecretStr = SecretStr("")
+    github_private_key_pem: SecretStr = SecretStr("")
+    github_redirect_uri: str = ""
     web_origin: str = "http://localhost:3000"
     smtp_host: str = "localhost"
     smtp_port: int = 1025

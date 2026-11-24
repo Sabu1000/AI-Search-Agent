@@ -381,3 +381,23 @@ KMS rotation, and the full security review remain later work.
 
 Backfill `B4` delivered the first authentication vertical slice; the current
 provider work extends that boundary without changing this document's ownership.
+
+### GitHub App setup for the first provider slice
+
+The backend feature flag is off by default. For a disposable GitHub App, use
+selected repositories and read access only for metadata, contents, issues,
+and pull requests. Turn off “Request user authorization (OAuth) during
+installation.” Set both the App setup URL and the user OAuth callback URL to
+the same HTTPS endpoint, `/v1/connections/github/callback`. Turn on expiration
+for user access tokens. Set the matching `UAS_GITHUB_*` configuration in the
+backend secret store; never commit credentials. Omit authorization queries
+from application, proxy, and provider-request logs.
+
+An authenticated workspace owner/admin starts with explicit positive GitHub
+repository IDs and a fixed UI return path. The setup callback is not proof of
+access: it only starts a separate PKCE user-consent step. The second callback
+checks both App installation and user repository access, then records the
+verified selection and a content-free audit event without storing either
+provider token. A `pending_sync` result is not an active, indexed connection.
+The provider remains experimental until reconciliation and live sandbox
+verification are complete.

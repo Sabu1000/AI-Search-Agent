@@ -20,6 +20,9 @@ from universal_ai_search.auth.service import AuthenticationService
 from universal_ai_search.auth.store import SQLAlchemyAuthStore
 from universal_ai_search.config import Settings, get_settings
 from universal_ai_search.connections.crypto import LocalEnvelopeEncryption
+from universal_ai_search.connections.github import HttpGitHubAppGateway
+from universal_ai_search.connections.github_service import GitHubConnectionService
+from universal_ai_search.connections.github_store import SQLAlchemyGitHubConnectionStore
 from universal_ai_search.connections.google import HttpGoogleGateway
 from universal_ai_search.connections.service import GoogleConnectionService
 from universal_ai_search.connections.store import SQLAlchemyGoogleConnectionStore
@@ -43,6 +46,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         version=__version__,
         lifespan=_lifespan,
     )
+    app.openapi_version = "3.1.0"
     engine = create_async_engine(
         runtime_settings.database_url,
         pool_pre_ping=True,
@@ -83,6 +87,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         hash_key=runtime_settings.oauth_hash_key.get_secret_value().encode(),
         enabled=runtime_settings.google_oauth_enabled,
     )
+    app.state.github_connection_service = None
+    if runtime_settings.github_app_enabled:
+        app.state.github_connection_service = GitHubConnectionService(
+            store=SQLAlchemyGitHubConnectionStore(
+                engine,
+                audit_key=runtime_settings.auth_hash_key.get_secret_value().encode(),
+            ),
+            gateway=HttpGitHubAppGateway(
+                app_id=runtime_settings.github_app_id,
+                private_key_pem=(
+                    runtime_settings.github_private_key_pem.get_secret_value().encode()
+                ),
+            ),
+            encryption=LocalEnvelopeEncryption(
+                runtime_settings.provider_encryption_key.get_secret_value().encode()
+            ),
+            hash_key=runtime_settings.oauth_hash_key.get_secret_value().encode(),
+            app_slug=runtime_settings.github_app_slug,
+            client_id=runtime_settings.github_client_id,
+            client_secret=runtime_settings.github_client_secret.get_secret_value(),
+            redirect_uri=runtime_settings.github_redirect_uri,
+        )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[runtime_settings.web_origin],

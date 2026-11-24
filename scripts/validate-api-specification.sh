@@ -288,7 +288,7 @@ do
 done
 
 for runtime_contract in \
-  'openapi_version="3.1.0"' \
+  'openapi_version = "3.1.0"' \
   'RequestContextMiddleware' \
   'application/problem+json' \
   'class CursorSigner' \
