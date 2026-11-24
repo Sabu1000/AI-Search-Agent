@@ -103,6 +103,11 @@ async def test_signed_device_receives_real_one_write_upload_url(
             "UPDATE app.connections SET status = 'active' WHERE workspace_id = %s",
             (scope.workspace_id,),
         )
+        connection.execute(
+            "INSERT INTO app.workspace_usage (workspace_id) VALUES (%s) "
+            "ON CONFLICT (workspace_id) DO NOTHING",
+            (scope.workspace_id,),
+        )
         connection.commit()
         data = b"Local synthetic document for device upload acceptance."
         digest = _b64url(hashlib.sha256(data).digest())
@@ -133,7 +138,10 @@ async def test_signed_device_receives_real_one_write_upload_url(
                 )
 
             manifest_response = await post(target + "/manifests", manifest)
-            assert manifest_response.status_code == 200
+            assert manifest_response.status_code == 200, (
+                "manifest",
+                manifest_response.json().get("code"),
+            )
             upload_id = manifest_response.json()["requested_uploads"][0]["upload_id"]
             signed = await post(
                 target + "/uploads:sign",
@@ -147,7 +155,7 @@ async def test_signed_device_receives_real_one_write_upload_url(
                     "mime_type": "text/markdown",
                 },
             )
-            assert signed.status_code == 200
+            assert signed.status_code == 200, ("sign", signed.json().get("code"))
             reply = signed.json()
             tls = ssl.create_default_context(cafile=os.environ["UAS_VERIFY_S3_CA"])
             async with httpx.AsyncClient(
