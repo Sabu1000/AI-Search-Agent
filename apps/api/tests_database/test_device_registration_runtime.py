@@ -11,7 +11,7 @@ import psycopg
 import pytest
 from conftest import database_dsn
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from universal_ai_search.devices.registration import (
     DeviceRegistrationRateLimited,
@@ -108,7 +108,7 @@ def _expire(
     connection.commit()
 
 
-def _engine():
+def _engine() -> AsyncEngine:
     return create_async_engine(
         database_dsn().replace("postgresql://", "postgresql+asyncpg://"),
         connect_args={"server_settings": {"role": "app_api"}},

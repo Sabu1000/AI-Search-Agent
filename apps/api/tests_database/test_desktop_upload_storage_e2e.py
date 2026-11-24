@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import ssl
+from collections.abc import Mapping
 from importlib import import_module
 from typing import cast
 from uuid import UUID, uuid4
@@ -144,7 +145,7 @@ async def test_signed_device_upload_and_verified_indexing(
             transport=httpx.ASGITransport(app=app), base_url="https://api.example.test"
         ) as api:
 
-            async def post(path: str, body: dict[str, object]) -> httpx.Response:
+            async def post(path: str, body: Mapping[str, object]) -> httpx.Response:
                 payload = json.dumps(body, separators=(",", ":")).encode()
                 proof = _signed(key, path.encode(), payload, uuid4().bytes)
                 return await api.post(

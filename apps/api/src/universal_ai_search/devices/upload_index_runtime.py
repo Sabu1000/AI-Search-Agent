@@ -98,6 +98,23 @@ class NativeUploadIndexRepository:
         target: UploadIndexTarget,
         item: NormalizedDocument,
     ) -> None:
+        if (
+            item.external_id != target.source_external_id
+            or item.mime_type != target.mime_type
+            or item.canonical_url is not None
+            or item.access_metadata.public
+            or item.access_metadata.user_ids != (str(target.owner_id),)
+            or item.access_metadata.group_ids
+            or item.access_metadata.domain_ids
+            or item.provider_metadata
+            != {
+                "local_upload_id": str(target.upload_id),
+                "local_device_id": str(target.device_id),
+                "local_folder_id": str(target.folder_id),
+                "local_manifest_sequence": target.manifest_sequence,
+            }
+        ):
+            raise UploadIndexError("UPLOAD_INDEX_INVALID")
         with psycopg.connect(self._dsn, row_factory=dict_row) as conn:
             self._context(conn, claim.workspace_id)
             if self._target(conn, claim, publishing=True) != target:
