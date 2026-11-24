@@ -1,9 +1,13 @@
 # Implementation Status
 
-**Last audited:** 2026-08-21
+**Last audited:** 2026-11-24
 
-**Audited baseline:** `64f4678`; this ledger includes the completed Google Drive
-backend phase review checkpoint within `B7`.
+**Earlier fixture-backed milestone:** [`c8a644c`][feature-baseline], which
+builds on the certified Drive backend checkpoint `64f4678`. This audit
+distinguishes synthetic provider responses and local PostgreSQL verification
+from live provider and release acceptance.
+
+[feature-baseline]: https://github.com/Sabu1000/AI-Search-Agent/commit/c8a644cf4899cdd574f11a97817a8bdc7a64ff65
 
 **Purpose:** Separate validated design specifications from working product
 features and keep an evidence-based record of the next implementation step.
@@ -28,35 +32,37 @@ shells are never counted as finished user features.
 | --- | --- | --- | --- |
 | `00_README.md` | Complete | Partial foundation | Monorepo, CI, Docker Compose, web/API/worker/desktop shells, shared packages, and quality gates work. Branch protection, a license decision, and the Phase 1 review remain open. |
 | `01_PROJECT_SPEC.md` | Complete | MVP partial (`1/11`) | `AUTH-001` passes end to end; the other 10 MVP requirements remain partial or not started. See the requirement audit below. |
-| `02_SYSTEM_ARCHITECTURE.md` | Complete | Partial | Process shells, local dependencies, schema migration ordering, revision-aware API readiness, a fail-closed HTTP boundary, database-backed authentication/authorization, durable Gmail/index workers, and hybrid search exist. Drive/GitHub/desktop orchestration, model streaming, and remaining product services do not. |
-| `03_SEARCH_ENGINE_DESIGN.md` | Complete | Local-index backend implemented; product phase partial | Exact/title, PostgreSQL FTS, pgvector, and trigram lanes run inside API-role RLS; typed filters, weighted RRF, deterministic reranking/deduplication, bounded context, extractive claims/citations, history persistence, safe empty answers, and `/v1/search` pass unit and live PostgreSQL tests. Production semantic/model adapters, relevance evaluation corpus, conflict evaluator, cache, and UI remain. |
-| `04_DATABASE_SCHEMA.md` | Complete | Database runtime implemented; phase partial | Alembic creates `33/33` specified tables, authoritative index/Gmail/Drive claim functions, constraints, indexes, roles, grants, and forced RLS. Compose migrates before API startup; readiness checks revision `0007_drive_sync_runtime`; 20 PostgreSQL integration tests cover auth, Google authorization, Gmail sync/reconciliation, Drive traversal/document extraction, indexing/search, catalog, lifecycle, and tenant isolation. Seed data, backup automation, and the Phase 3 review remain. |
-| `05_API_SPECIFICATION.md` | Complete | API platform, auth, search, and Google authorization implemented; product API partial | FastAPI has the OpenAPI 3.1 `/v1` boundary, request IDs, strict serialization, RFC 9457 problems, signed cursors, idempotency primitives, and working authentication/workspace backends. `9/49` catalogued product endpoints exist; rate limiting, SSE, remaining repositories, and other feature services remain. |
-| `06_CONNECTOR_FRAMEWORK.md` | Complete | SDK plus tested Gmail and Google Drive backend phases implemented; provider ecosystem partial | The complete tested Gmail backend and selected-root Drive backend phase are certified. Drive provides bounded read-only traversal, PDF/uploaded-DOCX/native-Docs/Sheets/Slides extraction, authoritative deletion reconciliation, durable jobs, encrypted progress, stable identity/metadata, shared-drive parameters, shortcut non-traversal, safe fallback states, and a whole-tree deletion barrier. GitHub, local files, incremental Drive change polling, general scheduling, logging, and metrics remain. |
-| `07_INDEXING_PIPELINE.md` | Complete | Normalized text/Markdown plus bounded Drive document parser paths implemented | Deterministic normalization, structure-aware bounded PDF/DOCX/XLSX/PPTX extraction, language selection, chunking, exact/near deduplication, local 1,536-dimensional embeddings, durable PostgreSQL leasing, atomic promotion, unchanged skips, re-index supersession, and Drive deletion purging pass unit and PostgreSQL/pgvector tests. Production embedding providers remain a later integration. |
+| `02_SYSTEM_ARCHITECTURE.md` | Complete | Partial | Local topology, schema ordering, fail-closed HTTP boundaries, workspace authentication/authorization, durable Gmail/Drive/selected-GitHub indexing, and hybrid search exist. Desktop sync, model streaming, provider management UI, and remaining product services are open. |
+| `03_SEARCH_ENGINE_DESIGN.md` | Complete | Local-index backend implemented; product phase partial | PostgreSQL exact/FTS/pgvector/trigram retrieval, typed filters, RRF, deterministic ranking, bounded extractive claims/citations, history, and safe empty answers pass unit and local PostgreSQL tests. Signed-in web results support workspace and provider filters. Production semantic/model adapters, full filter and answer UI, evaluation, and cache remain. |
+| `04_DATABASE_SCHEMA.md` | Complete | Database runtime implemented; phase partial | Alembic creates `33/33` specified tables. The runtime adds GitHub authorization and sync migrations to the prior index/Gmail/Drive claim functions and forced RLS. Compose migrates before API startup; readiness checks revision `0009_github_sync_runtime`. Seed data, backup automation, and Phase 3 review remain. |
+| `05_API_SPECIFICATION.md` | Complete | API platform and selected product routes implemented | FastAPI provides OpenAPI 3.1, strict serialization, RFC 9457 problems, signed cursors, idempotency primitives, and workspace authentication. `12/49` catalogued product endpoints exist: six auth, two Google authorization, two GitHub authorization, signed GitHub webhook ingress, and search. Rate limiting, SSE, and remaining operations are open. |
+| `06_CONNECTOR_FRAMEWORK.md` | Complete | Gmail and selected-root Drive backend phases complete; provider ecosystem partial | The GitHub backend now verifies selected-repository grants, ingests bounded repository and discussion snapshots, reconciles absence after success, and closes visibility on failed verification. Desktop has a bounded scanner core. Live provider checks, native desktop sync, Drive change polling, and shared operational controls remain. |
+| `07_INDEXING_PIPELINE.md` | Complete | Normalized text/Markdown and bounded provider extraction paths implemented | Deterministic chunking/deduplication, local embeddings, durable leases, atomic promotion, unchanged skips and deletion purging pass unit and local PostgreSQL tests. Drive PDF/DOCX/XLSX/PPTX and bounded GitHub repository/discussion data feed the index. Desktop indexing handoff and production embedding providers remain open. |
 | `08_SECURITY_AND_PRIVACY.md` | Complete | Partial controls | The threat model, data classification, tenant/cryptographic boundaries, browser/input/model defenses, audit/redaction policy, deletion/backup rules, and security release gates are implementation-ready. Existing RLS, strict API boundaries, secret validation, and containerized tests implement only part of the required controls. |
-| `09_AUTH_AND_OAUTH.md` | Complete | Authentication, Google connection authorization, and worker refresh implemented; remaining provider/recovery work partial | Existing password/session behavior includes single-use Google callbacks, PKCE S256, exact read-only scopes, envelope-encrypted credentials, per-family jobs, in-memory worker decryption, and re-encryption after access-token refresh. Password recovery, reauthentication, Google login, GitHub authorization, revocation, key rotation/KMS integration, abuse throttling, and the full security review remain. |
+| `09_AUTH_AND_OAUTH.md` | Complete | Application authentication and provider authorization slices implemented | Google uses single-use callbacks, PKCE S256, exact read-only scopes, envelope-encrypted credentials, and worker-side refresh. The GitHub App path verifies workspace/session state, installation and repository access, and persists grants without provider tokens. Password recovery, reauthentication, Google login, live GitHub authorization, revocation, production KMS, throttling, and full security review remain. |
 
 The active implementation slice is provider and desktop integration through
 backfill `B7`. The tested Gmail backend phase is complete, including Google
 authorization, full/incremental sync, extraction, normalization, reconciliation,
 derived-data deletion, and error recovery. Bounded Drive folder traversal, PDF,
 DOCX, native Docs/Sheets/Slides extraction, authoritative deletion handling, and
-the selected-root backend phase review are complete. GitHub App authorization is
-next.
+the selected-root backend phase review are complete. GitHub App authorization
+and bounded repository/discussion polling now feed the index. The remaining
+integration work includes provider revocation, management UI, live
+provider acceptance, and native desktop sync.
 
 ## MVP requirement audit
 
 | Requirement | Status | Implemented evidence | Missing acceptance path |
 | --- | --- | --- | --- |
 | `AUTH-001` | Implemented | A visitor can register, receive and submit a single-use email proof, receive an owner workspace, log in, inspect memberships, rotate a session, log out, and sign back in through the minimal web UI and six `/v1/auth` endpoints. Argon2id, generic failures, signed 15-minute JWT access tokens, hashed opaque refresh/CSRF tokens, exact-origin CSRF checks, non-superuser RLS, route/unit/database tests, and the Docker smoke test cover the acceptance path. | No missing MVP acceptance path. Password recovery, OAuth login, rate limiting, reauthentication, and the complete Phase 2 security review are later hardening/expansion tasks. |
-| `DESKTOP-001` | Partial | Tauri React/Rust shell compiles and is container-checked. | Signed installers, folder selection, root authorization, scanner/watcher, device registration, offline queue, removal/deletion flow, and platform tests. |
-| `GOOGLE-001` | Partial | The Google authorization endpoints implement workspace/session binding, PKCE S256, exact Gmail/Drive read-only scopes, encrypted credentials, and per-family jobs. The Gmail backend phase is complete. Drive traverses selected roots through bounded durable jobs, supports shared drives without following shortcuts, extracts bounded PDF/DOCX text, exports native Docs/Sheets/Slides through bounded structure-aware parsers, and reconciles absent file IDs only after a successful whole-tree scan. | Selection/connection/search UI, incremental Drive change-token polling, and a live Google sandbox smoke test. |
-| `GITHUB-001` | Not started | Canonical SDK provider contract only. | GitHub App, installation/repository selection, API client, webhooks, reconciliation, access removal, UI, and provider contract tests. |
-| `SYNC-001` | Partial | SDK defines deterministic changes; authoritative PostgreSQL leases drive indexing, Gmail sync, and Drive folder traversal. Gmail provides complete tested full/history behavior; Drive uses one bounded page per job, encrypted folder progress, idempotent child-folder/page jobs, whole-tree completion accounting, and retryable authoritative absence reconciliation. | Incremental Drive change-token polling, generalized provider scheduling, status APIs/UI, wider cross-provider replay tests, and operational metrics. |
-| `SEARCH-001` | Partial | Authorized exact, FTS, vector, and trigram retrieval, typed filters, fusion, ranking, safe empty results, history, and API/database isolation tests work against indexed content; PostgreSQL tests prove Gmail content plus extracted Drive PDF, DOCX, Docs, Sheets, and Slides text reach that index and deleted Drive sources lose derived search data. | Live-provider certification, UI result/filter states, production semantic embeddings, and a labeled retrieval evaluation corpus. |
+| `DESKTOP-001` | Partial | Tauri React/Rust shell and bounded Unix scanner core exist. The scanner accepts a selected root, rejects symlinks and cross-filesystem traversal, excludes unsupported/unsafe files, and emits relative-path metadata and hashes without content payloads. | Native picker and root authorization, registration, persistence and watchers, offline queue and upload, removal/deletion, signed installers, and cross-platform testing including Windows. |
+| `GOOGLE-001` | Partial | The Google authorization endpoints implement workspace/session binding, PKCE S256, exact Gmail/Drive read-only scopes, encrypted credentials, and per-family jobs. The Gmail backend phase is complete. Drive traverses selected roots through bounded durable jobs, supports shared drives without following shortcuts, extracts bounded PDF/DOCX text, exports native Docs/Sheets/Slides through bounded structure-aware parsers, and reconciles absent file IDs only after a successful whole-tree scan. | Provider connection/selection UI, incremental Drive change-token polling, and a live Google sandbox smoke test. |
+| `GITHUB-001` | Partial | Opt-in App authorization binds encrypted single-use state to the workspace/session and saves only verified selected grants. Bounded file/README and issue/PR/review ingestion, durable polling, atomic reconciliation and freshness fences are covered by synthetic GitHub and local PostgreSQL tests. | Individual repository grant revocation and deletion, full connection management, live sandbox smoke, and phase review. |
+| `SYNC-001` | Partial | PostgreSQL leases drive indexing, Gmail full/history sync, Drive page jobs, and selected GitHub snapshots. Authoritative complete scans reconcile missing data; failed GitHub scans hide stale results without treating failure as proof of absence. | Incremental Drive change polling, generalized provider scheduling, status APIs/UI, cross-provider replay, and operational metrics. |
+| `SEARCH-001` | Partial | Authorized hybrid retrieval, filters, ranking, empty results and history are tested. Local PostgreSQL tests cover provider fixtures, indexed content, deletion or stale-authorization visibility, and tenant isolation. Signed-in web search supports basic workspace/provider filtering. | Live-provider certification, remaining filter and search UI scope, production semantic embeddings, and labeled retrieval evaluation. |
 | `ANSWER-001` | Partial | Bounded authorized context produces extractive material claims with one-to-one citations and an explicit `no_authorized_results` insufficient-evidence response. | Production model gateway, synthesis/conflict evaluator, streaming UI, and measured grounding evaluation. |
-| `CITATION-001` | Partial | The API derives excerpts and allowlisted HTTPS targets from authorized stored metadata, links claims to stable source/chunk IDs, and omits unavailable targets. | UI rendering/opening, target reauthorization endpoint, revoked-target end-to-end tests, and measured citation correctness. |
+| `CITATION-001` | Partial | The API links excerpts to authorized source/chunk IDs and allowlisted HTTPS targets. The web results panel opens allowlisted provider URLs. | Answer-level citation UI, target reauthorization endpoint, revoked-target end-to-end tests, and measured citation correctness. |
 | `CONNECTION-001` | Partial | Connection, exact scope, cursor, deletion, job, and outbox storage exists; Google credentials use per-record AES-256-GCM envelope encryption, are decrypted only for claimed work, and refreshed credentials are re-encrypted. | Disconnect/revocation, KMS-backed key wrapping and rotation, sync cancellation, cascade workers, progress API/UI, and 24-hour enforcement. |
 | `ACCOUNT-001` | Partial | Workspace state and durable deletion-request/job/outbox/audit storage exist. | Immediate access-termination service, cascade workers, receipt/status, export, backup-retention handling, and deadline alerts/tests. |
 | `SAFETY-001` | Partial | Product and SDK are structurally read-only; strict API models reject unknown input; privacy-safe problems avoid echoing inputs and internal errors; database-backed auth/workspace dependencies fail closed; signed cursors and idempotency hashes bind principal/workspace context; identity and tenant tables use tested forced RLS. | Content sanitization boundaries, prompt-injection fixtures through retrieval/answering, log redaction, and full cross-user service tests. |
@@ -68,9 +74,9 @@ prerequisite code exists; it does not increase the end-to-end count.
 
 ### Foundation
 
-- `apps/web`: tested Next.js production shell.
+- `apps/web`: Next.js authentication, workspace selection, and indexed result search.
 - `apps/api`: tested FastAPI liveness/readiness service and durable indexing worker.
-- `apps/desktop`: tested Tauri/React shell and Rust compile configuration.
+- `apps/desktop`: Tauri/React shell plus a separately tested Rust manifest scanner.
 - `packages/shared-types` and `packages/ui`: tested starter packages.
 - `compose.yaml`: PostgreSQL/pgvector, Redis, MinIO, Mailpit, API, and web local
   topology.
@@ -112,10 +118,9 @@ logging, metrics, and the Phase 4 review remain open.
 - `app_api`, `app_worker`, and `app_audit_reader` are non-login,
   non-`BYPASSRLS` roles. Identity and tenant tables use forced, fail-closed RLS.
 - Compose runs migrations to completion before starting the API and worker, and
-  readiness rejects any revision other than `0007_drive_sync_runtime`.
-- An ephemeral PostgreSQL 16/pgvector Docker suite runs Python quality gates
-  and `19` authentication, Google/Gmail, indexing, search, catalog,
-  migration-lifecycle, foreign-key, and tenant-isolation tests in CI.
+  readiness rejects any revision other than `0009_github_sync_runtime`.
+- Local PostgreSQL 16/pgvector checks cover migrations, tenant isolation,
+  authentication, Google and GitHub authorization/sync, indexing, and search.
 
 Database master tasks complete: `12/15`: `P3-001` through `P3-012`. Seed data,
 backup implementation, and the Phase 3 review remain open. These tables are
@@ -125,8 +130,9 @@ user-visible workflows.
 ### API platform
 
 - FastAPI publishes OpenAPI 3.1 and mounts a `/v1` router with six authentication
-  operations, two Google authorization operations, and hybrid search; the other 40 product operations stay closed
-  until their services exist.
+  operations, two Google authorization operations, two GitHub authorization
+  operations, and hybrid search. The selected-root Drive checkpoint predated
+  the GitHub routes (`9/49` catalogued operations at that time).
 - Every response receives a canonical UUID request ID; valid caller IDs are
   normalized and invalid IDs are replaced.
 - Strict request/response models enforce unknown-field rejection, canonical
@@ -144,8 +150,8 @@ user-visible workflows.
   authority is rejected.
 - Compose passes independent cursor/idempotency secrets; settings reject short,
   shared, or local-only production values.
-- The combined backend gate reports its current test and coverage totals below;
-  Black, Ruff, and strict mypy run in the same Docker target.
+- The backend CI gate runs tests plus Black, Ruff, and strict mypy in the Docker
+  target. The checkpoint evidence below labels the recorded totals by scope.
 
 ### Authentication vertical slice
 
@@ -167,9 +173,9 @@ user-visible workflows.
   functions and forced RLS protect account, session, and membership reads.
 - Six catalogued endpoints implement register, email verification, login,
   refresh, logout, and `me`; the Next.js page provides their minimal UI.
-- `160 backend tests at 90.97% line coverage`, `20 PostgreSQL integration tests`,
-  web checks, production builds, Docker health checks, and
-  `scripts/smoke-auth.py` cover the slice.
+- Historical Drive-era evidence includes `160 backend tests at 90.97% line coverage`,
+  `20 PostgreSQL integration tests`, web/build/health checks, and
+  `scripts/smoke-auth.py`. These are snapshot figures, not current suite totals.
 
 Authentication master tasks complete: `12/18`: `P2-001` through `P2-007`,
 `P2-010`, and `P2-013` through `P2-016`. Password recovery, Google/GitHub login,
@@ -220,8 +226,9 @@ checkpoint.
   → hybrid search → history plus filter narrowing and cross-tenant denial.
 
 Search-engine master tasks complete: `9/9`, `P9-001` through `P9-009`, for the
-local-index backend scope. Production model synthesis, labeled quality gates,
-and user-facing search/chat screens remain later phases.
+local-index backend scope. The web results panel supports provider and workspace
+selection. Production model synthesis, labeled quality gates, answer/chat
+presentation, and the remaining filters are open.
 
 ### Gmail full and incremental synchronization
 
@@ -328,52 +335,77 @@ selection UI, and a live Google sandbox smoke test remain later integrations.
 
 Drive master tasks complete: `10/10`: `P6-001` through `P6-010`. The tested
 selected-root backend milestone passes its
-[phase review](DRIVE_PHASE_REVIEW.md); GitHub App authorization (`P7-001`) is next.
+[phase review](DRIVE_PHASE_REVIEW.md).
 
-The first `P7-001` slice adds a GitHub App HTTP gateway with PKCE code
-exchange, selected-installation and user repository checks, and in-memory
-short-lived installation tokens restricted to explicit repository IDs and
-read-only permissions. Synthetic provider tests exercise the gateway.
-The opt-in start/callback routes, encrypted single-use workspace/session
-state, and audited PostgreSQL repository grants now exist. A verified
-connection is saved as pending and carries no provider token. No live
-GitHub App credentials are required for the synthetic tests. Live sandbox
-verification and the full webhook/revocation lifecycle are still open.
+### GitHub App authorization and bounded repository sync
 
-A selected repository now queues a bounded sync. The worker reads a pinned
-default-branch snapshot plus bounded issue/PR discussions, then atomically
-stages content for indexing, records repository visibility, and reconciles
-absent sources. Failed scans never reconcile absence and close the
-repository's search visibility; verified search authority expires when
-polling stops. The raw webhook verifier is implemented independently; HTTP
-delivery persistence is not yet connected. These gates are covered by
-synthetic provider tests and local PostgreSQL, not live GitHub.
+- The App HTTP gateway uses PKCE code exchange, verifies installation and user
+  repository access, and holds scoped, short-lived read-only installation
+  credentials only in memory. Opt-in start/callback routes persist encrypted
+  single-use workspace/session state and audited repository grants, never
+  provider tokens. A connection begins pending until a snapshot succeeds.
+- Initial grants queue durable repository sync. The worker reads the verified
+  default branch at one pinned commit, normalizes supported README/docs/code,
+  and separately ingests bounded issues, pull requests, and discussions. It
+  excludes unsupported, oversized, generated, and likely secret-bearing files.
+- A complete snapshot stages content and reconciles absent sources atomically
+  before renewing repository visibility. Failed verification closes
+  visibility without treating a failed scan as evidence of deletion.
+  Search results require an active, selected grant verified within 15 minutes.
+- Migrations `0008_github_app_authorization` and `0009_github_sync_runtime`
+  supply grant and sync persistence. Unit tests use synthetic GitHub responses.
+  Local PostgreSQL tests cover authorization, worker/index/search behavior and
+  the visibility fence; no live GitHub App credentials were used.
+- Signed webhook ingress stores bounded, content-free replay records and
+  coalesces provider reconciliation. Scope events fence in-flight snapshots
+  before they can publish. Follow-up checks remove derived content for a
+  verified App uninstall, not ambiguous repository failures. The full
+  revocation and live acceptance matrix remains open.
 
-The signed-in web shell now supports scoped result search with workspace and
-provider filters. The desktop includes a bounded selected-root scanner for
-safe text fixtures, not a complete native sync path. Neither partial slice
-changes the end-to-end MVP acceptance count.
+### Signed-in web search and desktop scanner
+
+- The browser results panel narrows indexed search by workspace and provider.
+  It displays typed snippets and opens only allowlisted provider HTTPS source
+  links and extractive answers with grounded citations. A GitHub form starts
+  consent for selected IDs and reports pending sync without claiming success.
+  The panel does not implement model synthesis or the full set of filters.
+- The [desktop scanner](../apps/desktop/src-tauri/scanner/README.md) emits
+  bounded metadata and hashes for allowed text under a caller-approved root.
+  The local SQLite baseline compares accepted snapshots without advancing
+  until acknowledgement. The core has no uploader or picker and does not
+  send file contents or absolute paths. It fails closed on unsupported
+  platforms; native packaging and end-to-end sync are not certified.
+
+### First offline retrieval evaluation
+
+The [synthetic, versioned evaluation](../apps/api/tests_database/fixtures/SEARCH_EVALUATION.md)
+runs the actual local indexing and search API against PostgreSQL under the
+tenant role. It covers 28 labeled cases, including foreign-tenant and
+no-answer cases. This fixture reports 87.5% overall recall at 10, 40% recall in
+its semantic subset, no unauthorized references, and abstention in all four
+labeled no-answer cases. Citation checks establish provenance on this fixture
+rather than independent entailment. A held-out benchmark, production semantic
+embeddings and live provider baselines remain open.
 
 ## Explicitly unimplemented inventory
 
-The following do not exist in production code yet:
+The following are still open:
 
-- A general ORM model layer or seed data; the implemented services use narrow
-  authentication, search, indexing, and connection repositories.
-- Password recovery, reauthentication, Google login, GitHub authorization,
-  production KMS integration, authentication abuse throttling, and account profile editing.
-- Incremental Drive change-token polling; authoritative full-scan deletion and
-  bounded PDF/DOCX/Docs/Sheets/Slides extraction are implemented. GitHub and
-  local-file content clients do not exist yet.
-- Binary attachment content extraction, PDF/Office parsers, OCR, production semantic
-  embeddings, and provider-specific extraction policies.
-- Conversations, production model calls, streamed answers, or conflict-aware
-  synthesis.
-- The other 40 product `/v1` endpoints, web dashboard, search/chat UI,
-  connection UI, or source browser.
-- Desktop folder selection, scanner, watcher, manifest sync, or offline queue.
-- Disconnect/account deletion workflows, billing, production deployment, or
-  operational dashboards.
+- A general ORM model layer, seed data, and automated database backups.
+- Password recovery, reauthentication, Google login, production KMS, auth
+  abuse throttling, and account profile editing.
+- Incremental Drive change-token polling; Gmail/Drive connection UI and
+  live provider smoke tests.
+- GitHub individual repository revocation, live acceptance, and operational
+  webhook retention and recovery validation.
+- Binary Gmail attachment extraction, OCR, production semantic embeddings,
+  conversations, model synthesis/conflict checks, and streamed answers.
+- Unimplemented catalogued API operations, connection management, source
+  browsing, advanced search filters, and conversation citation lifecycle.
+- Native desktop folder picker, persisted registration/approval, watchers,
+  offline queue, upload, and server-side manifest reconciliation.
+- Disconnect/account deletion workflows, billing, production deployment,
+  and operational dashboards.
 
 ## Backfill sequence
 
@@ -389,7 +421,7 @@ define design ownership:
 | `B4` | Authentication vertical slice | **Complete:** users, password/session security, register/verify/login/refresh/logout/me endpoints, workspace bootstrap, minimal UI, PostgreSQL tests, and a live Docker smoke test. |
 | `B5` | Stage 07 indexing design and implementation | **Complete:** deterministic text/Markdown extraction, chunking, deduplication, local embeddings, durable jobs, authoritative worker claims, atomic promotion, and fake-connector-to-index PostgreSQL tests. |
 | `B6` | Stage 03 search implementation | **Complete:** tenant-safe exact/FTS/vector/trigram retrieval, filters, fusion/ranking, bounded context, extractive citations, search API/history, and unit/PostgreSQL tests. |
-| `B7` | Real provider and desktop slices | **In progress:** The Gmail and selected-root Google Drive backend phases are complete and certified. GitHub App authorization is next, followed by repository content and local desktop behavior, each certified and integrated end to end. Incremental Drive change-token polling remains later provider hardening. |
+| `B7` | Real provider and desktop slices | **In progress:** Gmail and selected-root Drive backend phases are complete for their tested scopes. GitHub has tested authorization, bounded snapshot sync, and signed webhook replay handling; live acceptance remains open. Web results/citations and the desktop scanner plus manifest baseline are partial product slices. Full provider management and native desktop sync remain. |
 
 The active backfill item is always the first unfinished row. Backfills `B0`
 through `B6` are complete; `B7` is active. No later slice may be reported
@@ -398,7 +430,7 @@ exists.
 
 ## Evidence commands
 
-The audit baseline is reproducible with:
+The project gates for this audit are:
 
 ```sh
 pnpm check
@@ -411,6 +443,11 @@ docker compose build api web
 python3 scripts/smoke-auth.py
 ```
 
-Every backfill commit must update this ledger, run the checks relevant to its
-changed risk surface, push to `origin/main`, and verify the remote commit before
-the next slice begins.
+At `c8a644c`, the recorded fixture-backed gates included 310 backend unit
+cases and 21 local PostgreSQL cases, plus targeted reruns for the provider
+access recheck. These validate the tested code and database paths, not live
+GitHub/Gmail/Drive account acceptance or production deployment.
+
+For each release milestone, update the ledger, run checks relevant to the
+changed scope, and verify the pushed commit. Keep feature branch evidence
+separate from what is merged to `main` or deployed.

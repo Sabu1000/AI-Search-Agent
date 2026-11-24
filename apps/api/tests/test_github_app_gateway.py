@@ -236,3 +236,32 @@ async def test_rejects_oauth_exchange_error(pem: bytes, response: object) -> Non
             code="code",
             verifier="verifier",
         )
+
+
+@pytest.mark.parametrize(
+    ("app_response", "installation_response", "removed"),
+    [
+        ({"id": 7}, 404, True),
+        ({"id": 7}, 403, False),
+        ({"id": 7}, 500, False),
+        ({"id": 7}, {"id": 3}, False),
+        ({"id": 8}, 404, False),
+    ],
+)
+async def test_removal_requires_expected_app_and_authoritative_404(
+    pem: bytes,
+    app_response: object,
+    installation_response: object,
+    removed: bool,
+) -> None:
+    client, seen = gateway(pem, app_response, installation_response)
+    assert client.app_id == 7
+    assert not await client.confirms_installation_removed(
+        expected_app_id=8, installation_id=3
+    )
+    assert not seen
+    assert (
+        await client.confirms_installation_removed(expected_app_id=7, installation_id=3)
+        is removed
+    )
+    assert seen[0].url.path == "/app"

@@ -29,6 +29,7 @@ class GitHubSyncTarget:
     installation_id: int
     repository_id: int
     authorization_generation: int = 1
+    github_app_id: int | None = None
 
 
 class GitHubSyncRepository:
@@ -51,7 +52,8 @@ class GitHubSyncRepository:
         row = connection.execute(
             """SELECT collection.id, collection.provider_external_id AS repository_id,
                       account.github_installation_id AS installation_id,
-                      collection.github_authorization_generation AS generation
+                      collection.github_authorization_generation AS generation,
+                      account.github_app_id
             FROM app.jobs AS job
             JOIN app.connections AS account ON account.workspace_id = job.workspace_id
                 AND account.id = job.connection_id
@@ -82,6 +84,7 @@ class GitHubSyncRepository:
             installation_id=cast(int, row["installation_id"]),
             repository_id=int(cast(str, row["repository_id"])),
             authorization_generation=cast(int, row["generation"]),
+            github_app_id=cast(int | None, row["github_app_id"]),
         )
 
     def load(self, claim: ClaimedSyncJob) -> GitHubSyncTarget:
@@ -147,13 +150,19 @@ class GitHubSyncRepository:
             self._schedule_next(connection, claim, target)
             GoogleSyncRepository._finish_current(connection, claim)
 
-    def fail(self, claim: ClaimedSyncJob, *, definitely_removed: bool = False) -> None:
+    def fail(
+        self,
+        claim: ClaimedSyncJob,
+        *,
+        removed_target: GitHubSyncTarget | None = None,
+    ) -> None:
         with psycopg.connect(self._dsn, row_factory=dict_row) as connection:
             IndexRepository._set_worker_context(connection, claim.workspace_id)
             try:
                 target = self._target(connection, claim)
             except GitHubSyncClaimError:
                 return
+            definitely_removed = removed_target is not None and removed_target == target
             # All failures close the repository's visibility gate. Only an
             # independently authoritative removal may purge retained content.
             connection.execute(
@@ -165,6 +174,21 @@ class GitHubSyncRepository:
             )
             if definitely_removed:
                 self._purge_absent(connection, claim, target, set())
+                connection.execute(
+                    """UPDATE app.connections AS account
+                       SET status = 'reauthorization_required',
+                           last_error_code = 'GITHUB_INSTALLATION_REMOVED',
+                           updated_at = clock_timestamp(),
+                           lock_version = lock_version + 1
+                       WHERE account.id = %s AND NOT EXISTS (
+                           SELECT 1 FROM app.source_collections AS collection
+                           WHERE collection.workspace_id = account.workspace_id
+                             AND collection.connection_id = account.id
+                             AND collection.kind = 'repository' AND collection.selected
+                             AND collection.status = 'active'
+                       )""",
+                    (claim.connection_id,),
+                )
             else:
                 self._schedule_next(connection, claim, target)
             connection.execute(

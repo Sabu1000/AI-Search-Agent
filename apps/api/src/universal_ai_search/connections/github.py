@@ -65,6 +65,38 @@ class HttpGitHubAppGateway:
         self._transport = transport
         self._clock = clock or (lambda: datetime.now(UTC))
 
+    @property
+    def app_id(self) -> int:
+        return self._app_id
+
+    async def confirms_installation_removed(
+        self, *, installation_id: int, expected_app_id: int
+    ) -> bool:
+        """An authenticated App-specific 404 can establish uninstall, not timeout."""
+        if expected_app_id != self._app_id or not _valid_id(installation_id):
+            return False
+        credential = self._app_jwt()
+        identity = await self._request("GET", "/app", credential=credential)
+        if not _valid_id(identity.get("id")) or identity["id"] != expected_app_id:
+            return False
+        try:
+            async with httpx.AsyncClient(
+                base_url=API_ORIGIN,
+                timeout=15,
+                follow_redirects=False,
+                trust_env=False,
+                transport=self._transport,
+                headers={
+                    "Authorization": f"Bearer {credential}",
+                    "Accept": "application/vnd.github+json",
+                    "X-GitHub-Api-Version": "2022-11-28",
+                },
+            ) as client:
+                response = await client.get(f"/app/installations/{installation_id}")
+                return response.status_code == 404
+        except httpx.HTTPError:
+            return False
+
     @staticmethod
     def authorization_url(
         *, client_id: str, redirect_uri: str, state: str, challenge: str
@@ -101,7 +133,10 @@ class HttpGitHubAppGateway:
         """Return only an expiring App user token; discard any refresh token."""
         try:
             async with httpx.AsyncClient(
-                timeout=15, follow_redirects=False, transport=self._transport
+                timeout=15,
+                follow_redirects=False,
+                trust_env=False,
+                transport=self._transport,
             ) as client:
                 response = await client.post(
                     f"{OAUTH_ORIGIN}/login/oauth/access_token",
@@ -157,6 +192,7 @@ class HttpGitHubAppGateway:
                 base_url=API_ORIGIN,
                 timeout=15,
                 follow_redirects=False,
+                trust_env=False,
                 transport=self._transport,
                 headers={
                     "Authorization": f"Bearer {credential}",

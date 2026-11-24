@@ -106,6 +106,7 @@ class SQLAlchemyGitHubConnectionStore:
         user_id: UUID,
         session_id: UUID,
         installation_id: int,
+        github_app_id: int,
         repository_ids: frozenset[int],
     ) -> UUID:
         # Never replace a previous grant. Reconciliation and reauthorization
@@ -117,6 +118,7 @@ class SQLAlchemyGitHubConnectionStore:
             "session": session_id,
             "id": connection_id,
             "installation": installation_id,
+            "github_app": github_app_id,
         }
         async with self._engine.begin() as conn:
             await _set_context(conn, workspace_id=workspace_id, user_id=user_id)
@@ -142,9 +144,9 @@ class SQLAlchemyGitHubConnectionStore:
                 text(
                     """INSERT INTO app.connections (
                          id, workspace_id, owner_user_id, provider,
-                         github_installation_id, display_label, status)
+                         github_installation_id, github_app_id, display_label, status)
                        VALUES (:id, :workspace, :actor, 'github',
-                               :installation, 'GitHub', 'pending')
+                               :installation, :github_app, 'GitHub', 'pending')
                        ON CONFLICT DO NOTHING RETURNING id"""
                 ),
                 params,

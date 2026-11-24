@@ -54,7 +54,7 @@ def test_empty_database_upgrade_creates_exact_catalog(
     }
     assert tables == EXPECTED_TABLES
     assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-        "0010_github_webhook_runtime",
+        "0011_github_app_identity",
     )
 
 

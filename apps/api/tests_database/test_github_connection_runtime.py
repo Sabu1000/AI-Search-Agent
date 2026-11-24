@@ -84,6 +84,7 @@ async def test_git_hub_grants_are_bound_to_verified_manager_session(
             workspace_id=workspace,
             user_id=user,
             installation_id=42,
+            github_app_id=7,
             repository_ids=frozenset({8, 10}),
         )
         with pytest.raises(GitHubAuthorizationError):
@@ -249,3 +250,24 @@ async def test_git_hub_grants_are_bound_to_verified_manager_session(
         runtime.fail(inflight)
     finally:
         await await_conn.dispose()
+
+    connection.execute(
+        """UPDATE app.jobs SET available_at = now() - interval '3 minutes'
+           WHERE job_type = 'sync' AND status = 'pending'
+             AND payload ->> 'collection_id' = %s""",
+        (str(target.collection_id),),
+    )
+    connection.commit()
+    removal_claim = runtime.claim("github-test")
+    assert removal_claim is not None
+    removed_target = runtime.load(removal_claim)
+    assert removed_target.collection_id == target.collection_id
+    assert removed_target.github_app_id == 7
+    runtime.fail(removal_claim, removed_target=removed_target)
+    assert connection.execute(
+        "SELECT selected, status FROM app.source_collections WHERE id=%s",
+        (target.collection_id,),
+    ).fetchone() == (False, "removed")
+    assert connection.execute(
+        "SELECT state FROM app.sources WHERE connection_id=%s", (connection_id,)
+    ).fetchone() == ("deleted",)

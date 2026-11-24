@@ -1,0 +1,419 @@
+{
+  "version": "synthetic-v1",
+  "documents": [
+    {
+      "id": "gh-retry",
+      "provider": "github",
+      "type": "code",
+      "title": "retry_policy.py",
+      "author": "Mira Vale",
+      "date": "2026-08-04",
+      "content": "PAY_RETRY_MAX limits exponential payment retries to five attempts. Retry delay uses jitter. Never retry permanent validation errors."
+    },
+    {
+      "id": "gh-window",
+      "provider": "github",
+      "type": "issue",
+      "title": "ORC-417 settlement batching decision",
+      "author": "Mira Vale",
+      "date": "2026-09-03",
+      "content": "ORC-417 sets the Orchid settlement batch window to fifteen minutes. The window starts at the quarter hour."
+    },
+    {
+      "id": "gh-export",
+      "provider": "github",
+      "type": "pull_request",
+      "title": "Ledger export format v2",
+      "author": "Tari Quinn",
+      "date": "2026-09-08",
+      "content": "Ledger export format v2 uses newline-delimited JSON. Each row carries a receipt_id field and the currency."
+    },
+    {
+      "id": "gh-cache",
+      "provider": "github",
+      "type": "code",
+      "title": "cache_policy.ts",
+      "author": "Mira Vale",
+      "date": "2026-09-18",
+      "content": "CART_CACHE_TTL_SECONDS is 900 seconds for shopping cart snapshots. Invalidation occurs after checkout."
+    },
+    {
+      "id": "gh-mesh",
+      "provider": "github",
+      "type": "review",
+      "title": "Service mesh review",
+      "author": "Ira North",
+      "date": "2026-10-04",
+      "content": "The service mesh uses mutual TLS between service endpoints. Review approved after certificate rotation verification."
+    },
+    {
+      "id": "gh-sidecar",
+      "provider": "github",
+      "type": "file",
+      "title": "Nebula sidecar wiring notes",
+      "author": "Ira North",
+      "date": "2026-08-12",
+      "content": "The Nebula sidecar listens on port 9105 for metrics. Only the internal monitoring subnet may connect."
+    },
+    {
+      "id": "gh-ci",
+      "provider": "github",
+      "type": "file",
+      "title": "Build gate runbook",
+      "author": "Tari Quinn",
+      "date": "2026-09-12",
+      "content": "A build gate rejects packages lacking an SPDX manifest. This is required before publishing artifacts."
+    },
+    {
+      "id": "mail-launch",
+      "provider": "gmail",
+      "type": "email",
+      "title": "Orchid launch time confirmation",
+      "author": "Rae Finch",
+      "date": "2026-10-05",
+      "content": "The Orchid launch starts at 14:00 UTC on Thursday. The release team is meeting in channel launch-ops."
+    },
+    {
+      "id": "mail-funding",
+      "provider": "gmail",
+      "type": "email",
+      "title": "Cedar budget signoff",
+      "author": "Rae Finch",
+      "date": "2026-09-13",
+      "content": "Cedar budget signoff approves 4800 credits for calibration equipment. Shipping is funded separately."
+    },
+    {
+      "id": "mail-orchid",
+      "provider": "gmail",
+      "type": "email",
+      "title": "Orchid deployment owner",
+      "author": "Mira Vale",
+      "date": "2026-09-10",
+      "content": "Mira Vale is the Orchid deployment owner. Rollback authority remains with the on-call release engineer."
+    },
+    {
+      "id": "mail-delta-old",
+      "provider": "gmail",
+      "type": "email",
+      "title": "Delta status from June",
+      "author": "Tari Quinn",
+      "date": "2026-06-01",
+      "content": "The Delta status checkpoint used the Maple relay. This archival message closes the June review."
+    },
+    {
+      "id": "mail-delta-new",
+      "provider": "gmail",
+      "type": "email",
+      "title": "Delta status from October",
+      "author": "Tari Quinn",
+      "date": "2026-10-01",
+      "content": "The Delta status checkpoint switched to the Birch relay. The October review confirms the replacement."
+    },
+    {
+      "id": "mail-violet",
+      "provider": "gmail",
+      "type": "email",
+      "title": "Violet experiment results",
+      "author": "Ira North",
+      "date": "2026-10-10",
+      "content": "The Violet experiment lowered power draw by twelve percent at idle. Peak load was unchanged."
+    },
+    {
+      "id": "drive-deploy",
+      "provider": "google_drive",
+      "type": "file",
+      "title": "Orchid deployment checklist",
+      "author": "Tari Quinn",
+      "date": "2026-09-11",
+      "content": "The Orchid deployment checklist requires a sixteen minute canary. The on-call release engineer must monitor error rates."
+    },
+    {
+      "id": "drive-calibration",
+      "provider": "google_drive",
+      "type": "file",
+      "title": "Cedar calibration reference",
+      "author": "Rae Finch",
+      "date": "2026-09-24",
+      "content": "Cedar calibration uses a 12 millimeter gauge. Perform calibration at room temperature before collecting data."
+    },
+    {
+      "id": "drive-delta",
+      "provider": "google_drive",
+      "type": "file",
+      "title": "Delta relay inventory",
+      "author": "Mira Vale",
+      "date": "2026-10-08",
+      "content": "The Delta relay inventory lists spare Juniper relay parts. Keep them in the west cabinet."
+    },
+    {
+      "id": "drive-limit-a",
+      "provider": "google_drive",
+      "type": "file",
+      "title": "Peregrine quota design note",
+      "author": "Ira North",
+      "date": "2026-08-09",
+      "content": "The Peregrine quota decision in this document is 180 requests per minute for standard clients."
+    },
+    {
+      "id": "drive-limit-b",
+      "provider": "google_drive",
+      "type": "file",
+      "title": "Peregrine quota operating note",
+      "author": "Tari Quinn",
+      "date": "2026-08-09",
+      "content": "The Peregrine quota decision in this document is 220 requests per minute for standard clients."
+    },
+    {
+      "id": "drive-removal",
+      "provider": "google_drive",
+      "type": "file",
+      "title": "Atlas data purge procedure",
+      "author": "Rae Finch",
+      "date": "2026-10-02",
+      "content": "Atlas data purge removes searchable copies after revocation. The data safety procedure prohibits restoring revoked access."
+    },
+    {
+      "id": "local-bridge",
+      "provider": "local_files",
+      "type": "file",
+      "title": "Bridge board hardware checklist",
+      "author": "Ira North",
+      "date": "2026-10-04",
+      "content": "The bridge board uses a 47 ohm resistor for the reset pin. Check the wiring with power disconnected."
+    },
+    {
+      "id": "local-shade",
+      "provider": "local_files",
+      "type": "file",
+      "title": "Shade paint experiment",
+      "author": "Tari Quinn",
+      "date": "2026-08-22",
+      "content": "The Shade paint experiment compared cobalt and ivory swatches. Cobalt dried in twenty minutes."
+    },
+    {
+      "id": "local-scheduler",
+      "provider": "local_files",
+      "type": "file",
+      "title": "Queue simulator configuration",
+      "author": "Mira Vale",
+      "date": "2026-10-07",
+      "content": "The queue simulator reserves three worker slots for interactive jobs. Batch tasks may occupy the remaining slots."
+    },
+    {
+      "id": "local-tests",
+      "provider": "local_files",
+      "type": "file",
+      "title": "Smoke test matrix",
+      "author": "Rae Finch",
+      "date": "2026-09-23",
+      "content": "The smoke test matrix evaluates login recovery, spreadsheet imports and package signatures after each upgrade."
+    },
+    {
+      "id": "local-orchid",
+      "provider": "local_files",
+      "type": "file",
+      "title": "Orchid launch timing draft",
+      "author": "Mira Vale",
+      "date": "2026-09-01",
+      "content": "This earlier Orchid launch planning note proposed 09:00 UTC. It was not a confirmed launch time."
+    },
+    {
+      "id": "foreign-hidden",
+      "provider": "gmail",
+      "type": "email",
+      "title": "Quartz sentinel 4401",
+      "author": "Outside Tenant",
+      "date": "2026-10-10",
+      "content": "Quartz sentinel 4401 only exists in a different workspace and must never appear in this workspace.",
+      "other_workspace": true
+    }
+  ],
+  "cases": [
+    { "id": "exact-orc", "class": "exact", "query": "ORC-417", "labels": ["gh-window"] },
+    { "id": "exact-spdx", "class": "exact", "query": "\"SPDX manifest\"", "labels": ["gh-ci"] },
+    {
+      "id": "exact-receipt",
+      "class": "code",
+      "query": "receipt_id",
+      "labels": ["gh-export"],
+      "providers": ["github"]
+    },
+    { "id": "exact-retry", "class": "code", "query": "PAY_RETRY_MAX", "labels": ["gh-retry"] },
+    {
+      "id": "exact-cache",
+      "class": "code",
+      "query": "CART_CACHE_TTL_SECONDS",
+      "labels": ["gh-cache"],
+      "source_types": ["code"]
+    },
+    {
+      "id": "exact-mesh",
+      "class": "exact",
+      "query": "mutual TLS",
+      "labels": ["gh-mesh"],
+      "source_types": ["review"]
+    },
+    {
+      "id": "exact-sidecar",
+      "class": "exact",
+      "query": "Nebula sidecar metrics",
+      "labels": ["gh-sidecar"]
+    },
+    {
+      "id": "email-budget",
+      "class": "email",
+      "query": "Cedar budget signoff",
+      "labels": ["mail-funding"],
+      "providers": ["gmail"]
+    },
+    {
+      "id": "email-violet",
+      "class": "email",
+      "query": "Violet experiment results",
+      "labels": ["mail-violet"],
+      "source_types": ["email"]
+    },
+    {
+      "id": "email-launch",
+      "class": "email",
+      "query": "Orchid launch time confirmation",
+      "labels": ["mail-launch"],
+      "providers": ["gmail"],
+      "answer": true
+    },
+    {
+      "id": "person-mira",
+      "class": "filter",
+      "query": "Orchid deployment",
+      "labels": ["mail-orchid"],
+      "people": ["mira vale"],
+      "providers": ["gmail"]
+    },
+    {
+      "id": "person-tari",
+      "class": "filter",
+      "query": "ORCHID DEPLOYMENT CHECKLIST",
+      "labels": ["drive-deploy"],
+      "people": ["tari quinn"],
+      "providers": ["google_drive"]
+    },
+    {
+      "id": "date-older",
+      "class": "filter",
+      "query": "Delta status checkpoint",
+      "labels": ["mail-delta-old"],
+      "providers": ["gmail"],
+      "date_to_exclusive": "2026-10-01T00:00:00Z",
+      "answer": true
+    },
+    {
+      "id": "date-newer",
+      "class": "filter",
+      "query": "Delta status checkpoint",
+      "labels": ["mail-delta-new"],
+      "providers": ["gmail"],
+      "date_from": "2026-10-01T00:00:00Z",
+      "answer": true
+    },
+    {
+      "id": "date-open",
+      "class": "filter",
+      "query": "Delta status checkpoint",
+      "labels": ["mail-delta-old", "mail-delta-new"],
+      "providers": ["gmail"]
+    },
+    {
+      "id": "sem-calibrate",
+      "class": "semantic",
+      "query": "What gauge should we use to calibrate Cedar equipment?",
+      "labels": ["drive-calibration"],
+      "providers": ["google_drive"]
+    },
+    {
+      "id": "sem-retry",
+      "class": "semantic",
+      "query": "How many attempts before a payment retry stops?",
+      "labels": ["gh-retry"]
+    },
+    {
+      "id": "sem-purge",
+      "class": "semantic",
+      "query": "How does Atlas take search copies away after permission revocation?",
+      "labels": ["drive-removal"]
+    },
+    {
+      "id": "sem-bridge",
+      "class": "semantic",
+      "query": "Bridge board reset pin resistance recommendation",
+      "labels": ["local-bridge"]
+    },
+    {
+      "id": "sem-scheduler",
+      "class": "semantic",
+      "query": "How many worker slots are reserved for interactive jobs?",
+      "labels": ["local-scheduler"]
+    },
+    {
+      "id": "cross-orchid",
+      "class": "cross_source",
+      "query": "Orchid deployment owner and deployment checklist",
+      "labels": ["mail-orchid", "drive-deploy"],
+      "providers": ["gmail", "google_drive"],
+      "answer": true
+    },
+    {
+      "id": "cross-cedar",
+      "class": "cross_source",
+      "query": "Cedar budget signoff and calibration gauge",
+      "labels": ["mail-funding", "drive-calibration"],
+      "providers": ["gmail", "google_drive"],
+      "answer": true
+    },
+    {
+      "id": "cross-delta",
+      "class": "cross_source",
+      "query": "Delta October status checkpoint and relay inventory",
+      "labels": ["mail-delta-new", "drive-delta"],
+      "providers": ["gmail", "google_drive"]
+    },
+    {
+      "id": "conflict-quota",
+      "class": "conflict",
+      "query": "Peregrine quota decision",
+      "labels": ["drive-limit-a", "drive-limit-b"],
+      "providers": ["google_drive"],
+      "answer": true
+    },
+    {
+      "id": "no-match",
+      "class": "no_answer",
+      "query": "zzqzxv jkkxvzz vqqwzxf",
+      "labels": [],
+      "answer": true
+    },
+    {
+      "id": "no-people",
+      "class": "no_answer",
+      "query": "Cedar calibration",
+      "labels": [],
+      "people": ["nobody fabricated"],
+      "answer": true
+    },
+    {
+      "id": "no-date",
+      "class": "no_answer",
+      "query": "Delta status",
+      "labels": [],
+      "date_from": "2027-01-01T00:00:00Z",
+      "answer": true
+    },
+    {
+      "id": "foreign-private",
+      "class": "no_answer",
+      "query": "\"Quartz sentinel 4401\"",
+      "labels": [],
+      "people": ["outside tenant"],
+      "answer": true
+    }
+  ]
+}

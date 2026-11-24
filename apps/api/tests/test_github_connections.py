@@ -55,6 +55,7 @@ class MemoryStore:
 def service_fixture() -> tuple[GitHubConnectionService, MemoryStore, SimpleNamespace]:
     store = MemoryStore()
     gateway = SimpleNamespace(
+        app_id=7,
         authorization_url=HttpGitHubAppGateway.authorization_url,
         exchange_user_code=AsyncMock(return_value="ghu_in_memory"),
         verify_selected_repositories=AsyncMock(),
@@ -127,6 +128,7 @@ async def test_two_single_use_steps_bind_session_and_only_persist_grants() -> No
         user_id=USER,
         session_id=SESSION,
         installation_id=42,
+        github_app_id=7,
         repository_ids=frozenset({19, 23}),
     )
     with pytest.raises(GitHubAuthorizationError):

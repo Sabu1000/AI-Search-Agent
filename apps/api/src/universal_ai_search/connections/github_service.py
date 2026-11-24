@@ -51,6 +51,7 @@ class GitHubConnectionStore(Protocol):
         user_id: UUID,
         session_id: UUID,
         installation_id: int,
+        github_app_id: int,
         repository_ids: frozenset[int],
     ) -> UUID: ...
 
@@ -178,6 +179,7 @@ class GitHubConnectionService:
             user_id=user_id,
             session_id=session_id,
             installation_id=installation_id,
+            github_app_id=self._gateway.app_id,
             repository_ids=repository_ids,
         )
         return GitHubAuthorizationComplete(connection_id, path)

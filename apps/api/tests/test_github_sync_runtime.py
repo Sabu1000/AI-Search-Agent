@@ -34,3 +34,27 @@ def test_worker_commits_only_complete_snapshots() -> None:
     assert runtime.run_once("worker")
     repository.commit.assert_called_once()
     repository.fail.assert_called_once_with(claim)
+
+
+def test_permission_failure_only_purges_with_positive_same_target_proof() -> None:
+    from uas_connector_sdk.errors import PermissionDeniedError
+
+    repository = Mock()
+    claim = ClaimedSyncJob(uuid4(), uuid4(), uuid4(), 1, "worker")
+    target = GitHubSyncTarget(uuid4(), 8, 15, github_app_id=7)
+    repository.claim.return_value = claim
+    repository.load.return_value = target
+    reader = SimpleNamespace(read=AsyncMock(side_effect=PermissionDeniedError))
+    verify = AsyncMock(return_value=True)
+    runtime = GitHubSyncRuntime(
+        repository=repository, reader=reader, removal_verifier=verify
+    )
+    assert runtime.run_once("worker")
+    verify.assert_awaited_once_with(target)
+    repository.commit.assert_not_called()
+    repository.fail.assert_called_once_with(claim, removed_target=target)
+
+    verify.side_effect = ProviderUnavailableError
+    repository.reset_mock()
+    assert runtime.run_once("worker")
+    repository.fail.assert_called_once_with(claim, removed_target=None)

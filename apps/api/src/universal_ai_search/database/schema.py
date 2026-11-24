@@ -8,7 +8,7 @@ from pathlib import Path
 from alembic import command
 from alembic.config import Config
 
-EXPECTED_SCHEMA_REVISION = "0007_drive_sync_runtime"
+EXPECTED_SCHEMA_REVISION = "0011_github_app_identity"
 
 
 def build_alembic_config() -> Config:

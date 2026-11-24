@@ -16,7 +16,10 @@ from universal_ai_search.indexing.repository import IndexRepository
 from universal_ai_search.indexing.runtime import IndexingRuntime
 from universal_ai_search.sync.drive_repository import DriveSyncRepository
 from universal_ai_search.sync.drive_runtime import DriveSyncRuntime
-from universal_ai_search.sync.github_repository import GitHubSyncRepository
+from universal_ai_search.sync.github_repository import (
+    GitHubSyncRepository,
+    GitHubSyncTarget,
+)
 from universal_ai_search.sync.github_runtime import (
     GitHubSnapshotReader,
     GitHubSyncRuntime,
@@ -90,18 +93,23 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     github_runtime = None
     if settings.github_app_enabled:
+        gateway = HttpGitHubAppGateway(
+            app_id=settings.github_app_id,
+            private_key_pem=settings.github_private_key_pem.get_secret_value().encode(),
+        )
+
+        async def verify_removed(target: GitHubSyncTarget) -> bool:
+            if target.github_app_id is None:
+                return False
+            return await gateway.confirms_installation_removed(
+                installation_id=target.installation_id,
+                expected_app_id=target.github_app_id,
+            )
+
         github_runtime = GitHubSyncRuntime(
             repository=GitHubSyncRepository(settings.database_url),
-            reader=GitHubSnapshotReader(
-                HttpGitHubRepositoryClient(
-                    gateway=HttpGitHubAppGateway(
-                        app_id=settings.github_app_id,
-                        private_key_pem=(
-                            settings.github_private_key_pem.get_secret_value().encode()
-                        ),
-                    )
-                )
-            ),
+            reader=GitHubSnapshotReader(HttpGitHubRepositoryClient(gateway=gateway)),
+            removal_verifier=verify_removed,
         )
     worker_id = f"{socket.gethostname()}:{__version__}"
     if arguments.once:

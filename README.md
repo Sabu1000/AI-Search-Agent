@@ -1,8 +1,9 @@
 # Universal AI Search
 
-Universal AI Search is a read-only search and question-answering product for
-local files, Gmail, Google Drive, and GitHub. It combines keyword and vector
-search, then returns grounded answers with links back to the original sources.
+Universal AI Search is a read-only search and question-answering project for
+local files, Gmail, Google Drive, and GitHub. The working search backend
+combines keyword and vector retrieval, with extractive answers and source
+citations available through the API.
 
 The repository is being specified and built incrementally from the documents in
 [`universal_ai_search_documentation/`](universal_ai_search_documentation/00_README.md).
@@ -11,41 +12,39 @@ separately so a validated design is never presented as working product code.
 
 ## Current status
 
-- Specification status: the numbered design set is validated; implementation
-  evidence is tracked separately in the status ledger
-- Implementation status: foundation is partial (`27/30` master tasks), the
-  authentication phase is partial (`12/18` master tasks), the database phase
-  is partial (`12/15` master tasks), the connector framework is partial (`7/11`
-  master tasks), indexing is complete for normalized text/Markdown (`10/10`),
-  search is complete for the local-index backend (`9/9`), and end-to-end MVP
-  acceptance is `1/11`
-- Backfill status: `B0` through `B6` are complete; `B7` is active, with Google
-  authorization plus bounded Gmail full/incremental synchronization and advanced
-  email parsing, attachment extraction, normalization, deletion reconciliation,
-  and error recovery implemented. The selected-root Google Drive backend phase is
-  also complete and certified, including bounded document extraction and deletion
-  reconciliation
-- Next implementation slice: GitHub App authorization (`P7-001`)
-- Product status: tested project foundation, an implemented 33-table
-  PostgreSQL schema with forced tenant RLS, an implemented Python connector
-  SDK, a tested fail-closed API platform layer, and a working six-endpoint
-  email/password authentication flow with a minimal web UI, durable indexing,
-  tenant-safe hybrid search, Google OAuth connection authorization, and Gmail
-  full/incremental sync with safe MIME parsing, stable attachment sources, and
-  searchable sender/recipient metadata in the index. Completed Gmail scans now
-  reconcile provider absences, deletions purge derived index data, and transient
-  failures use bounded durable retries. Google Drive now traverses selected
-  folder trees and extracts bounded PDF, DOCX, Google Docs, Sheets, and Slides
-  content with safe fallback descriptors. Completed Drive scans reconcile
-  provider absences and purge deleted sources only after the whole tree succeeds;
-  provider UIs and the 40 remaining product endpoints remain to be built
-- Safety boundary: version 1 is read-only; retrieved content is untrusted data
-  and cannot trigger actions
+The numbered specifications are validated. End-to-end product acceptance is
+**1 of 11 MVP requirements**: the email/password authentication flow. The
+remaining requirements have working parts, but are not complete.
+
+- **Gmail and Google Drive:** Tested backends support bounded Gmail mailbox and
+  history sync and selected-root Drive traversal. Extracted text reaches the
+  search index. Both providers reconcile absences only after complete,
+  authoritative full scans. Live provider smoke tests and connection UIs are open.
+- **GitHub:** Opt-in GitHub App authorization saves verified grants for selected
+  repositories. The worker queues bounded default-branch README, docs, source,
+  issue, and pull request snapshots, verifies selection before publishing, and
+  reconciles content missing from a successful scan. Search requires recent
+  verification of the repository grant. Unit tests use synthetic GitHub
+  responses; local PostgreSQL tests exercise the worker/index/search path.
+  Signed webhooks durably queue reconciliation and verified App uninstall can
+  remove derived content. Individual repository-access revocation, the full
+  management UI, and live acceptance remain open.
+- **Web search:** Signed-in users can select a workspace, filter indexed results
+  by provider, and open allowlisted source links. The UI can render extractive
+  answers with citations and initiate GitHub consent. Model synthesis, advanced
+  filters, and production relevance remain open.
+- **Desktop:** A bounded Rust scanner builds relative-path manifests for safe
+  text files under one approved root. An acknowledged local SQLite baseline
+  tracks added, edited, renamed, and removed files. The native picker, watching,
+  uploading, and end-to-end desktop sync remain open; Windows fails closed.
+
+Backfill `B0` through `B6` is complete; provider and desktop integration
+(`B7`) is active. Version 1 stays read-only. Source content is untrusted data,
+not instructions the product executes.
 
 See the
 [implementation status ledger](universal_ai_search_documentation/IMPLEMENTATION_STATUS.md)
-for requirement-by-requirement evidence, explicit missing features, and the
-dependency-ordered backfill sequence.
+for evidence, scope boundaries, and open requirements.
 
 ## MVP
 
@@ -173,7 +172,7 @@ selected tree. PDFs are downloaded through the read-only media endpoint with a
 retain explicit fallback statuses when empty, encrypted, malformed, or oversized.
 Uploaded DOCX files are safely expanded and preserve headings, paragraphs, lists,
 and tables. Native Google Docs are exported read-only to DOCX and use that same
-bounded parser while retaining their original Drive identity and MIME type. Google
+bounded parser while retaining their original Drive identity and MIME type.
 Native Google Sheets are exported to XLSX with named-sheet, row, cell, formula,
 and value extraction. Native Google Slides are exported to PPTX with ordered
 slide and speaker-note extraction. Both parsers enforce download, archive, XML,

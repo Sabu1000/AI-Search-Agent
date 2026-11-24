@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from typing import Protocol
 
 from uas_connector_sdk import NormalizedDocument
-from uas_connector_sdk.errors import ConnectorError
+from uas_connector_sdk.errors import (
+    AuthenticationError,
+    ConnectorError,
+    PermissionDeniedError,
+)
 
 from universal_ai_search.connections.github import GitHubAuthorizationError
 from universal_ai_search.connections.github_issues import GitHubDiscussionClient
@@ -69,18 +74,30 @@ class GitHubSyncRuntime:
         *,
         repository: GitHubSyncRepository,
         reader: SnapshotReader,
+        removal_verifier: Callable[[GitHubSyncTarget], Awaitable[bool]] | None = None,
     ) -> None:
         self._repository = repository
         self._reader = reader
+        self._verify_removal = removal_verifier
 
     def run_once(self, worker_id: str) -> bool:
         claim = self._repository.claim(worker_id)
         if claim is None:
             return False
+        target: GitHubSyncTarget | None = None
         try:
             target = self._repository.load(claim)
             documents = asyncio.run(self._read(target))
             self._repository.commit(claim, target, documents)
+        except (AuthenticationError, PermissionDeniedError):
+            if target is not None and self._verify_removal is not None:
+                try:
+                    removed = asyncio.run(self._check_removal(target))
+                except (ConnectorError, GitHubAuthorizationError, TimeoutError):
+                    removed = False
+                self._repository.fail(claim, removed_target=target if removed else None)
+            else:
+                self._repository.fail(claim)
         except (
             ConnectorError,
             GitHubAuthorizationError,
@@ -89,6 +106,12 @@ class GitHubSyncRuntime:
         ):
             self._repository.fail(claim)
         return True
+
+    async def _check_removal(self, target: GitHubSyncTarget) -> bool:
+        if self._verify_removal is None:  # defensive for direct callers
+            return False
+        async with asyncio.timeout(25):
+            return await self._verify_removal(target)
 
     async def _read(self, target: GitHubSyncTarget) -> tuple[NormalizedDocument, ...]:
         async with asyncio.timeout(120):
