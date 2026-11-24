@@ -17,6 +17,7 @@ from universal_ai_search.api.models import (
 )
 from universal_ai_search.search.planner import SearchFilters
 from universal_ai_search.search.service import SearchInput, SearchService, snippet
+from universal_ai_search.search.source_detail import safe_open_url
 
 router = APIRouter(tags=["search"])
 
@@ -186,10 +187,12 @@ async def search(
                 line_end=item.candidate.line_end,
             ),
             target=(
-                TargetResponse(
-                    kind="provider_url", open_url=item.candidate.canonical_url
+                TargetResponse(kind="provider_url", open_url=open_url)
+                if (
+                    open_url := safe_open_url(
+                        item.candidate.provider, item.candidate.canonical_url
+                    )
                 )
-                if item.candidate.canonical_url
                 else None
             ),
         )

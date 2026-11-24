@@ -26,6 +26,7 @@ from universal_ai_search.conversations.repository import (
 
 from .connections import _require_csrf
 from .conversations import _scope, _unavailable
+from .job_operations import JobOperationResponse, get_job_operation
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 operations_router = APIRouter(prefix="/operations", tags=["operations"])
@@ -131,19 +132,26 @@ async def delete_conversation(
     return result
 
 
-@operations_router.get("/{operation_id}", response_model=DeletionResponse)
+@operations_router.get(
+    "/{operation_id}", response_model=DeletionResponse | JobOperationResponse
+)
 async def read_conversation_deletion_operation(
     operation_id: UUID,
+    request: Request,
     response: Response,
     principal: PrincipalDependency,
     workspace: WorkspaceDependency,
     store: StoreDependency,
-) -> DeletionResponse:
+) -> DeletionResponse | JobOperationResponse:
     scope = _scope(principal, workspace)
     try:
         receipt = await store.read(scope=scope, receipt_id=operation_id)
-    except (ConversationDenied, ConversationMissing):
+    except ConversationDenied:
         raise ProblemError(
             status=404, code="OPERATION_NOT_FOUND", title="Operation is unavailable"
         ) from None
+    except ConversationMissing:
+        return await get_job_operation(
+            request, response, operation_id, workspace.workspace_id, workspace.user_id
+        )
     return _operation(receipt, response)

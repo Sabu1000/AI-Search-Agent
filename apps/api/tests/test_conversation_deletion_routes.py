@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 
 from test_conversation_routes import HEADERS, PATH, Auth, Workspace
@@ -70,7 +71,15 @@ def test_exact_confirmation_required_before_writing() -> None:
     store.delete.assert_not_awaited()
 
 
-def test_completed_receipt_is_content_free_and_has_a_private_status_endpoint() -> None:
+def test_completed_receipt_is_content_free_and_has_a_private_status_endpoint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from universal_ai_search.api.routes.job_operations import _not_found
+
+    monkeypatch.setattr(
+        "universal_ai_search.api.routes.conversation_deletion.get_job_operation",
+        AsyncMock(side_effect=_not_found()),
+    )
     client, store, _ = client_factory()
     request_id = uuid4()
     with client:

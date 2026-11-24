@@ -21,6 +21,8 @@ EXPECTED_TABLES = {
     "device_folders",
     "devices",
     "device_registration_challenges",
+    "device_request_nonces",
+    "device_manifest_pages",
     "document_versions",
     "embedding_profiles",
     "job_attempts",
@@ -55,7 +57,7 @@ def test_empty_database_upgrade_creates_exact_catalog(
     }
     assert tables == EXPECTED_TABLES
     assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-        "0014_github_scope_fences",
+        "0017_device_manifests",
     )
 
 

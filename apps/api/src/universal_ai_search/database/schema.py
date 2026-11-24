@@ -8,7 +8,7 @@ from pathlib import Path
 from alembic import command
 from alembic.config import Config
 
-EXPECTED_SCHEMA_REVISION = "0014_github_scope_fences"
+EXPECTED_SCHEMA_REVISION = "0017_device_manifests"
 
 
 def build_alembic_config() -> Config:

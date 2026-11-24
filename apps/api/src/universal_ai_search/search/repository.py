@@ -35,6 +35,8 @@ _ELIGIBLE = """
     source.workspace_id = :workspace_id
     AND source.state = 'active' AND source.deleted_at IS NULL
     AND connection.status = 'active'
+    AND (source.provider <> 'local_files'
+         OR connection.owner_user_id = app.current_user_id())
     AND (
       source.provider <> 'github' OR EXISTS (
           SELECT 1 FROM app.source_collection_memberships AS association

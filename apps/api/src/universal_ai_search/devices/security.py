@@ -182,6 +182,11 @@ def verify_request(
     return VerifiedDeviceRequest(device_id, request_id, nonce, timestamp)
 
 
+def hash_device_nonce(verified_nonce: bytes) -> bytes:
+    """Use one per-device replay namespace across every signed operation."""
+    return hashlib.sha256(b"uas-device-nonce-v1\0" + verified_nonce).digest()
+
+
 def _canonical_uuid(value: str) -> UUID:
     if not isinstance(value, str) or len(value) != 36:
         raise DeviceProofError(DeviceProofFailure.INVALID_MESSAGE)

@@ -176,6 +176,8 @@ def test_every_tenant_table_has_direct_workspace_and_forced_rls(
         assert protected[table] == (True, True)
     assert protected["embedding_profiles"] == (False, False)
     assert protected["device_registration_challenges"] == (True, True)
+    assert protected["device_request_nonces"] == (True, True)
+    assert protected["device_manifest_pages"] == (True, True)
 
     api_policy_tables = {
         row[0]

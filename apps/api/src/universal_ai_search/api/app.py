@@ -18,6 +18,8 @@ from universal_ai_search.auth.backends import (
     SessionAuthenticationBackend,
 )
 from universal_ai_search.auth.email import SMTPVerificationSender
+from universal_ai_search.auth.reauth import ReauthenticationService, RedisReauthLimiter
+from universal_ai_search.auth.reauth_store import ReauthenticationStore
 from universal_ai_search.auth.recovery import PasswordRecoveryService
 from universal_ai_search.auth.recovery_email import (
     BoundedRecoveryMailQueue,
@@ -40,17 +42,25 @@ from universal_ai_search.connections.github_event_store import (
 from universal_ai_search.connections.github_service import GitHubConnectionService
 from universal_ai_search.connections.github_store import SQLAlchemyGitHubConnectionStore
 from universal_ai_search.connections.google import HttpGoogleGateway
+from universal_ai_search.connections.mutations import SQLAlchemyConnectionMutationStore
 from universal_ai_search.connections.query import SQLAlchemyConnectionQueryReader
 from universal_ai_search.connections.service import GoogleConnectionService
 from universal_ai_search.connections.store import SQLAlchemyGoogleConnectionStore
 from universal_ai_search.conversations.deletion import ConversationDeletionStore
 from universal_ai_search.conversations.repository import ConversationRepository
+from universal_ai_search.devices.heartbeat import DeviceHeartbeatService
+from universal_ai_search.devices.heartbeat_store import SQLAlchemyDeviceHeartbeatStore
+from universal_ai_search.devices.manifest_store import SQLAlchemyDeviceManifestStore
+from universal_ai_search.devices.manifests import DeviceManifestService
+from universal_ai_search.devices.query import SQLAlchemyDeviceQueryReader
 from universal_ai_search.devices.registration import DeviceRegistrationService
 from universal_ai_search.devices.registration_store import (
     SQLAlchemyDeviceRegistrationStore,
 )
+from universal_ai_search.search.history import SearchHistoryStore
 from universal_ai_search.search.repository import SearchRepository
 from universal_ai_search.search.service import SearchService
+from universal_ai_search.search.source_detail import SourceDetailRepository
 
 
 @asynccontextmanager
@@ -96,9 +106,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ),
         web_origin=runtime_settings.web_origin,
     )
+    redis = Redis.from_url(runtime_settings.redis_url, socket_timeout=2)
+    app.state.recovery_redis = redis
+    app.state.reauth_service = ReauthenticationService(
+        store=ReauthenticationStore(engine),
+        security=service.password_security,
+        limiter=RedisReauthLimiter(cast(RedisScriptClient, redis)),
+        hash_key=runtime_settings.auth_hash_key.get_secret_value().encode(),
+    )
     app.state.password_recovery_service = None
     if runtime_settings.password_recovery_enabled:
-        redis = Redis.from_url(runtime_settings.redis_url, socket_timeout=2)
         mail_queue = BoundedRecoveryMailQueue(
             SMTPRecoveryMailer(
                 host=runtime_settings.smtp_host,
@@ -108,7 +125,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
         )
         app.state.recovery_mail = mail_queue
-        app.state.recovery_redis = redis
         app.state.password_recovery_service = PasswordRecoveryService(
             store=SQLAlchemyRecoveryStore(engine),
             security=PasswordSecurity(),
@@ -124,14 +140,42 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         service
     )
     app.state.search_service = SearchService(SearchRepository(engine))
+    app.state.source_detail_repository = SourceDetailRepository(engine)
+    app.state.source_cursor_signer = CursorSigner(
+        runtime_settings.cursor_signing_key.get_secret_value().encode()
+    )
+    app.state.search_history_store = SearchHistoryStore(
+        engine,
+        idempotency_secret=runtime_settings.idempotency_hash_key.get_secret_value().encode(),
+        audit_secret=runtime_settings.auth_hash_key.get_secret_value().encode(),
+    )
+    app.state.device_query_reader = SQLAlchemyDeviceQueryReader(engine)
+    app.state.device_cursor_signer = CursorSigner(
+        runtime_settings.cursor_signing_key.get_secret_value().encode()
+    )
     app.state.device_registration_service = None
+    app.state.device_heartbeat_service = None
+    app.state.device_manifest_service = None
     if runtime_settings.desktop_registration_enabled:
         registration_key = runtime_settings.auth_hash_key.get_secret_value().encode()
         app.state.device_registration_service = DeviceRegistrationService(
             SQLAlchemyDeviceRegistrationStore(engine, audit_key=registration_key),
             hash_key=registration_key,
         )
+        app.state.device_heartbeat_service = DeviceHeartbeatService(
+            SQLAlchemyDeviceHeartbeatStore(engine), hash_key=registration_key
+        )
+        app.state.device_manifest_service = DeviceManifestService(
+            SQLAlchemyDeviceManifestStore(engine), hash_key=registration_key
+        )
     app.state.connection_query_reader = SQLAlchemyConnectionQueryReader(engine)
+    app.state.connection_mutation_store = SQLAlchemyConnectionMutationStore(
+        engine,
+        idempotency_secret=runtime_settings.idempotency_hash_key.get_secret_value().encode(),
+        audit_secret=runtime_settings.auth_hash_key.get_secret_value().encode(),
+        google_sync_enabled=runtime_settings.google_oauth_enabled,
+        github_sync_enabled=runtime_settings.github_app_enabled,
+    )
     app.state.connection_cursor_signer = CursorSigner(
         runtime_settings.cursor_signing_key.get_secret_value().encode()
     )
