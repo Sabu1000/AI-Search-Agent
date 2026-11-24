@@ -152,29 +152,36 @@ class UserTurnStore:
                 # A saved key must not recreate a formerly deleted message.
                 raise ConversationMissing
 
-            created = await connection.execute(
-                text(
-                    """INSERT INTO app.messages
-                       (id, workspace_id, conversation_id, role, status, content,
-                        created_at, completed_at)
-                       VALUES (:message, :workspace, :conversation, 'user', 'complete',
-                               :content, statement_timestamp(), statement_timestamp())
-                       RETURNING id, role, status, content, created_at, completed_at"""
-                ),
-                {**params, "content": content},
-            )
-            message = _message(created.mappings().one())
-            await connection.execute(
-                text(
-                    """UPDATE app.conversations
-                       SET updated_at = greatest(updated_at, clock_timestamp())
-                       WHERE workspace_id = :workspace AND user_id = :actor
-                         AND id = :conversation"""
-                ),
-                params,
-            )
+            message = await self._insert_user_turn(connection, params, content)
             await self._remember(connection, params)
             return SavedUserTurn(message, created=True)
+
+    @staticmethod
+    async def _insert_user_turn(
+        connection: AsyncConnection, params: dict[str, object], content: str
+    ) -> Message:
+        created = await connection.execute(
+            text(
+                """INSERT INTO app.messages
+                   (id, workspace_id, conversation_id, role, status, content,
+                    created_at, completed_at)
+                   VALUES (:message, :workspace, :conversation, 'user', 'complete',
+                           :content, statement_timestamp(), statement_timestamp())
+                   RETURNING id, role, status, content, created_at, completed_at"""
+            ),
+            {**params, "content": content},
+        )
+        message = _message(created.mappings().one())
+        await connection.execute(
+            text(
+                """UPDATE app.conversations
+                   SET updated_at = greatest(updated_at, clock_timestamp())
+                   WHERE workspace_id = :workspace AND user_id = :actor
+                     AND id = :conversation"""
+            ),
+            params,
+        )
+        return message
 
     @staticmethod
     async def _lock_owned_conversation(

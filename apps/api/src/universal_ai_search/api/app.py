@@ -56,6 +56,7 @@ from universal_ai_search.connections.mutations import SQLAlchemyConnectionMutati
 from universal_ai_search.connections.query import SQLAlchemyConnectionQueryReader
 from universal_ai_search.connections.service import GoogleConnectionService
 from universal_ai_search.connections.store import SQLAlchemyGoogleConnectionStore
+from universal_ai_search.conversations.attempts import StreamAttemptStore
 from universal_ai_search.conversations.deletion import ConversationDeletionStore
 from universal_ai_search.conversations.repository import ConversationRepository
 from universal_ai_search.devices.heartbeat import DeviceHeartbeatService
@@ -245,6 +246,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         runtime_settings.cursor_signing_key.get_secret_value().encode()
     )
     app.state.conversation_repository = ConversationRepository(engine)
+    app.state.conversation_stream_store = StreamAttemptStore(
+        engine,
+        idempotency_secret=runtime_settings.idempotency_hash_key.get_secret_value().encode(),
+    )
+    app.state.conversation_stream_search = SearchRepository(engine)
     app.state.conversation_deletion_store = ConversationDeletionStore(
         engine,
         idempotency_secret=(

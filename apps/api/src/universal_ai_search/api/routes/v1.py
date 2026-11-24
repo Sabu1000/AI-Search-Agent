@@ -23,6 +23,9 @@ from universal_ai_search.api.routes.conversation_deletion import (
 from universal_ai_search.api.routes.conversation_deletion import (
     router as conversation_delete_router,
 )
+from universal_ai_search.api.routes.conversation_stream import (
+    router as conversation_stream_router,
+)
 from universal_ai_search.api.routes.conversations import router as conversation_router
 from universal_ai_search.api.routes.device_heartbeat import router as heartbeat_router
 from universal_ai_search.api.routes.device_manifests import (
@@ -73,6 +76,7 @@ router.include_router(github_webhook_router)
 router.include_router(connection_query_router)
 router.include_router(conversation_router)
 router.include_router(conversation_delete_router)
+router.include_router(conversation_stream_router)
 router.include_router(conversation_operations_router)
 router.include_router(search_router)
 router.include_router(device_router)

@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from contextlib import AsyncExitStack
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Literal, cast
 from uuid import UUID
 
+import anyio
 from fastapi import APIRouter, Body, Depends, Header, Query, Request, Response
+from fastapi.responses import JSONResponse
 from pydantic import Field, field_validator
+from sqlalchemy.exc import SQLAlchemyError
+from starlette.types import Receive, Scope, Send
 
 from universal_ai_search.api.auth import (
     AuthenticationMode,
@@ -35,6 +40,7 @@ from universal_ai_search.api.pagination import (
     normalized_context_hash,
 )
 from universal_ai_search.api.problems import ProblemError
+from universal_ai_search.conversations.extracts import DELIVERY_SECONDS
 from universal_ai_search.conversations.repository import (
     ROUTE,
     Conversation,
@@ -50,6 +56,7 @@ from universal_ai_search.conversations.repository import (
 )
 
 from .connections import _require_csrf
+from .search import CitationResponse, ClaimResponse
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
@@ -85,6 +92,8 @@ class MessageResponse(ResponseModel):
     content: str | None
     created_at: UtcDateTime
     completed_at: UtcDateTime | None
+    claims: list[ClaimResponse] | None = None
+    citations: list[CitationResponse] | None = None
 
 
 class ConversationDetail(ResponseModel):
@@ -179,7 +188,7 @@ def _page(
     context: CursorContext,
 ) -> PageMetadata:
     if len(rows) <= limit:
-        return PageMetadata(has_more=False)
+        return PageMetadata(has_more=False, next_cursor=None)
     final = rows[limit - 1]
     return PageMetadata(
         has_more=True,
@@ -205,7 +214,7 @@ def _model(item: Conversation) -> ConversationResponse:
 
 
 def _message_model(item: Message) -> MessageResponse:
-    return MessageResponse(
+    common = MessageResponse(
         id=item.id,
         role=item.role,
         status=item.status,
@@ -213,6 +222,100 @@ def _message_model(item: Message) -> MessageResponse:
         created_at=item.created_at,
         completed_at=item.completed_at,
     )
+    if not item.extracts:
+        return common
+    claims: list[ClaimResponse] = []
+    citations: list[CitationResponse] = []
+    for extract in item.extracts:
+        projection = extract.claim()
+        claims.append(ClaimResponse.model_validate(projection["claim"]))
+        for citation in cast(list[object], projection["citations"]):
+            citations.append(CitationResponse.model_validate(citation))
+    return common.model_copy(update={"claims": claims, "citations": citations})
+
+
+def _detail(
+    conversation: Conversation,
+    messages: list[Message],
+    limit: int,
+    signer: CursorSigner,
+    context: CursorContext,
+) -> ConversationDetail:
+    return ConversationDetail(
+        conversation=_model(conversation),
+        messages=Page[MessageResponse](
+            items=[_message_model(item) for item in messages[:limit]],
+            page=_page(messages, limit, signer, context),
+        ),
+    )
+
+
+class ProtectedConversationResponse(Response):
+    """Retain the authorization snapshot while handing one bounded JSON body to ASGI."""
+
+    def __init__(
+        self,
+        *,
+        repository: ConversationRepository,
+        scope: ConversationScope,
+        conversation_id: UUID,
+        limit: int,
+        after: SortKey | None,
+        signer: CursorSigner,
+        context: CursorContext,
+        access_expires_at: datetime,
+    ) -> None:
+        super().__init__(media_type="application/json")
+        self._repository = repository
+        self._scope = scope
+        self._conversation_id = conversation_id
+        self._limit = limit
+        self._after = after
+        self._signer = signer
+        self._context = context
+        self._access_expires_at = access_expires_at
+
+    def _require_horizon(self) -> None:
+        if self._access_expires_at <= datetime.now(UTC) + timedelta(
+            seconds=DELIVERY_SECONDS
+        ):
+            raise ConversationDenied
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        async with AsyncExitStack() as stack:
+            try:
+                with anyio.fail_after(4):
+                    self._require_horizon()
+                    conversation, messages = await stack.enter_async_context(
+                        self._repository.read_for_delivery(
+                            scope=self._scope,
+                            conversation_id=self._conversation_id,
+                            limit=self._limit,
+                            after=self._after,
+                        )
+                    )
+                    detail = _detail(
+                        conversation, messages, self._limit, self._signer, self._context
+                    )
+                    payload = JSONResponse(
+                        detail.model_dump(mode="json", exclude_unset=True),
+                        headers={
+                            "Cache-Control": "private, no-store",
+                            "Vary": "Authorization, Cookie, X-Workspace-ID",
+                        },
+                    )
+                    self._require_horizon()
+            except (ConversationDenied, ConversationMissing):
+                raise _unavailable() from None
+            except (SQLAlchemyError, TimeoutError):
+                raise ProblemError(
+                    status=503,
+                    code="CONVERSATION_READ_UNAVAILABLE",
+                    title="Conversation is temporarily unavailable",
+                    retryable=True,
+                ) from None
+            with anyio.fail_after(2):
+                await payload(scope, receive, send)
 
 
 @router.post("", response_model=ConversationResponse, status_code=201)
@@ -291,7 +394,11 @@ async def list_conversations(
     )
 
 
-@router.get("/{conversation_id}", response_model=ConversationDetail)
+@router.get(
+    "/{conversation_id}",
+    response_model=ConversationDetail,
+    response_model_exclude_unset=True,
+)
 async def read_conversation(
     conversation_id: UUID,
     request: Request,
@@ -300,23 +407,32 @@ async def read_conversation(
     workspace: WorkspaceDependency,
     repository: RepositoryDependency,
     query: Annotated[MessagePaginationQuery, Query()],
-) -> ConversationDetail:
+) -> ConversationDetail | Response:
     scope = _scope(principal, workspace)
     context, signer = _cursor_context(scope, conversation_id), _signer(request)
+    after = _after(query.cursor, signer, context)
+    if (
+        getattr(request.app.state, "conversation_stream_store", None) is not None
+        and principal.access_expires_at is not None
+    ):
+        return ProtectedConversationResponse(
+            repository=repository,
+            scope=scope,
+            conversation_id=conversation_id,
+            limit=query.limit,
+            after=after,
+            signer=signer,
+            context=context,
+            access_expires_at=principal.access_expires_at,
+        )
     try:
         conversation, messages = await repository.read(
             scope=scope,
             conversation_id=conversation_id,
             limit=query.limit + 1,
-            after=_after(query.cursor, signer, context),
+            after=after,
         )
     except (ConversationDenied, ConversationMissing):
         raise _unavailable() from None
     response.headers["Cache-Control"] = "private, no-store"
-    return ConversationDetail(
-        conversation=_model(conversation),
-        messages=Page[MessageResponse](
-            items=[_message_model(item) for item in messages[: query.limit]],
-            page=_page(messages, query.limit, signer, context),
-        ),
-    )
+    return _detail(conversation, messages, query.limit, signer, context)

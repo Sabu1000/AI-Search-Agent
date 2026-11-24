@@ -93,6 +93,7 @@ def test_openapi_is_31_and_only_completed_product_routes_are_open() -> None:
         "/v1/connections/{connection_id}/selections",
         "/v1/conversations",
         "/v1/conversations/{conversation_id}",
+        "/v1/conversations/{conversation_id}/messages:stream",
         "/v1/operations/{operation_id}",
         "/v1/operations/{operation_id}:retry",
         "/v1/devices/registration-challenges",

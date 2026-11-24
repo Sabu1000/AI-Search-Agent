@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-from dataclasses import dataclass
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Literal
 from uuid import UUID, uuid4
@@ -12,6 +14,15 @@ from uuid import UUID, uuid4
 from sqlalchemy import text
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
+
+from .extracts import (
+    EXTRACTIVE_MODEL,
+    MAX_ASSISTANTS_PER_PAGE,
+    LiveExtract,
+    active_delivery_session,
+    bound_delivery_sql,
+    current_persisted_page,
+)
 
 ROUTE = "/v1/conversations"
 type SortKey = tuple[datetime, UUID]
@@ -45,6 +56,7 @@ class Message:
     content: str | None
     created_at: datetime
     completed_at: datetime | None
+    extracts: tuple[LiveExtract, ...] = field(default=(), repr=False)
 
 
 class ConversationDenied(Exception):
@@ -284,6 +296,70 @@ class ConversationRepository:
                 {**values, "id": conversation_id, **_page_parameters(after, limit)},
             )
             return conversation, [_message(row) for row in result.mappings().all()]
+
+    @asynccontextmanager
+    async def read_for_delivery(
+        self,
+        *,
+        scope: ConversationScope,
+        conversation_id: UUID,
+        limit: int,
+        after: SortKey | None,
+    ) -> AsyncIterator[tuple[Conversation, list[Message]]]:
+        """An authorized snapshot held through the caller's bounded send."""
+        if not 1 <= limit <= MAX_ASSISTANTS_PER_PAGE:
+            raise ValueError("conversation delivery page bound exceeded")
+        async with self._engine.begin() as connection:
+            await bound_delivery_sql(connection)
+            values = await self._authorize(connection, scope)
+            if not await active_delivery_session(connection, values):
+                raise ConversationDenied
+            conversation = await self._existing(connection, values, conversation_id)
+            rows = (
+                (
+                    await connection.execute(
+                        text(
+                            """SELECT id, role,
+                           CASE WHEN role = 'assistant' AND status = 'complete'
+                                THEN 'insufficient_evidence' ELSE status END AS status,
+                           CASE WHEN role = 'user' AND status = 'complete' THEN content
+                                ELSE NULL END AS content,
+                           created_at, completed_at,
+                           (role = 'assistant' AND status = 'complete'
+                               AND model = :extractive AND content = '') AS is_extract
+                        FROM app.messages
+                        WHERE workspace_id = :workspace AND conversation_id = :id
+                          AND (CAST(:after_at AS TIMESTAMPTZ) IS NULL
+                               OR (created_at, id) > (:after_at, :after_id))
+                        ORDER BY created_at ASC, id ASC LIMIT :limit
+                        FOR SHARE NOWAIT"""
+                        ),
+                        {
+                            **values,
+                            "id": conversation_id,
+                            "extractive": EXTRACTIVE_MODEL,
+                            **_page_parameters(after, limit + 1),
+                        },
+                    )
+                )
+                .mappings()
+                .all()
+            )
+            identifiers = tuple(row["id"] for row in rows[:limit] if row["is_extract"])
+            evidence = await current_persisted_page(connection, values, identifiers)
+            messages = []
+            for row in rows:
+                message = _message(row)
+                extracts = evidence.get(message.id)
+                if extracts:
+                    message = replace(
+                        message,
+                        status="complete",
+                        content="\n\n".join(item.markdown() for item in extracts),
+                        extracts=extracts,
+                    )
+                messages.append(message)
+            yield conversation, messages
 
 
 def _page_parameters(after: SortKey | None, limit: int) -> dict[str, object]:

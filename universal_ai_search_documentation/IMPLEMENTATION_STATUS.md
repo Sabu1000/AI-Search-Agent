@@ -35,7 +35,7 @@ shells are never counted as finished user features.
 | `02_SYSTEM_ARCHITECTURE.md` | Complete | Partial | Local topology, schema ordering, fail-closed HTTP boundaries, workspace authentication/authorization, durable Gmail/Drive/selected-GitHub indexing, and hybrid search exist. Desktop sync, model streaming, provider management UI, and remaining product services are open. |
 | `03_SEARCH_ENGINE_DESIGN.md` | Complete | Local-index backend implemented; product phase partial | PostgreSQL exact/FTS/pgvector/trigram retrieval, typed filters, RRF, deterministic ranking, bounded extractive claims/citations, history, and safe empty answers pass unit and local PostgreSQL tests. Signed-in web results support workspace and provider filters. Production semantic/model adapters, full filter and answer UI, evaluation, and cache remain. |
 | `04_DATABASE_SCHEMA.md` | Complete | Database runtime implemented; phase partial | Alembic creates `33/33` specified tables. The runtime adds GitHub authorization and sync migrations to the prior index/Gmail/Drive claim functions and forced RLS. Compose migrates before API startup; readiness checks revision `0009_github_sync_runtime`. Seed data, backup automation, and Phase 3 review remain. |
-| `05_API_SPECIFICATION.md` | Complete | API platform and selected product routes implemented | FastAPI provides OpenAPI 3.1, strict serialization, RFC 9457 problems, signed cursors, idempotency primitives, and workspace authentication. `46/49` catalogued product operations are wired. The API coverage script reports method/path availability separately from unsupported subcases and end-to-end verification. Rate limiting, SSE, and remaining operations are open. |
+| `05_API_SPECIFICATION.md` | Complete | API platform and selected product routes implemented | FastAPI provides OpenAPI 3.1, strict serialization, RFC 9457 problems, signed cursors, idempotency primitives, and workspace authentication. `47/49` catalogued product operations are wired. The API coverage script reports method/path availability separately from unsupported subcases and end-to-end verification. The extractive SSE route is tested against PostgreSQL; broad rate limiting and two storage operations remain open. |
 | `06_CONNECTOR_FRAMEWORK.md` | Complete | Gmail and selected-root Drive backend phases complete; provider ecosystem partial | The GitHub backend now verifies selected-repository grants, ingests bounded repository and discussion snapshots, reconciles absence after success, and closes visibility on failed verification. Desktop has a bounded scanner core. Live provider checks, native desktop sync, Drive change polling, and shared operational controls remain. |
 | `07_INDEXING_PIPELINE.md` | Complete | Normalized text/Markdown and bounded provider extraction paths implemented | Deterministic chunking/deduplication, local embeddings, durable leases, atomic promotion, unchanged skips and deletion purging pass unit and local PostgreSQL tests. Drive PDF/DOCX/XLSX/PPTX and bounded GitHub repository/discussion data feed the index. Desktop indexing handoff and production embedding providers remain open. |
 | `08_SECURITY_AND_PRIVACY.md` | Complete | Partial controls | The threat model, data classification, tenant/cryptographic boundaries, browser/input/model defenses, audit/redaction policy, deletion/backup rules, and security release gates are implementation-ready. Existing RLS, strict API boundaries, secret validation, and containerized tests implement only part of the required controls. |
@@ -435,7 +435,11 @@ replay nonce. Active local-file devices and folder grants can submit bounded
 metadata manifests with durable idempotency and immutable upload intents.
 No object URL is minted; a tested upload reservation boundary checks exact
 metadata, replay, and quotas, but the signer and completion routes remain
-unwired until write-once storage can be verified.
+unwired. Before enabling them, verify on isolated S3-compatible storage that
+the staging credentials cannot replace or delete an uploaded object, that
+incorrect checksums, sizes, and content types fail, and that completion checks
+the exact staged object before triggering indexing. The disposable object
+server could not start in the test environment, so these checks were not run.
 
 Verification resend issues only hashed replacement proofs for pending accounts
 and returns one generic response. Device revocation completes bounded
@@ -458,6 +462,16 @@ offers one same-session JSON download within five minutes. The API never
 stores the archive or an external download URL, and refuses delivery if the
 authorized snapshot changed.
 
+Conversation streaming uses the authorized search index to produce up to three
+source excerpts with citations, without an external model call. Attempts reserve
+durable IDs; positive responses store only evidence references and recheck
+current authorization before protected delivery. Replay and conversation reads
+rehydrate citations only from currently accessible evidence. PostgreSQL tests
+cover proof of persistence, replay, grant revocation before delivery, and
+disconnection. GitHub evidence was tested with synthetic data; live provider
+and reverse-proxy acceptance, model synthesis, and desktop-file answers are
+not verified.
+
 Run `python scripts/api-coverage.py` with the backend environment to verify
 wired versus unwired operations from actual OpenAPI and the documented
 catalog. Counts do not guarantee every provider subcase or live readiness.
@@ -474,7 +488,7 @@ The following are still open:
 - GitHub individual repository revocation, live acceptance, and operational
   webhook retention and recovery validation.
 - Binary Gmail attachment extraction, OCR, production semantic embeddings,
-  model synthesis/conflict checks, conversation messages, and streamed answers.
+  model synthesis/conflict checks, and live-provider conversation validation.
 - Unimplemented catalogued API operations, connection management, source
   browsing, advanced search filters, and conversation citation lifecycle.
 - Native desktop folder picker, persisted registration/approval, watchers,
