@@ -189,3 +189,24 @@ REVOKE ALL ON FUNCTION app.read_device_upload_change(UUID,UUID,UUID,UUID,BIGINT,
     FROM PUBLIC, app_worker, app_audit_reader;
 GRANT EXECUTE ON FUNCTION app.read_device_upload_change(UUID,UUID,UUID,UUID,BIGINT,BIGINT)
     TO app_api;
+
+-- The API role cannot read opaque reservations. This owner-scoped predicate
+-- prevents the existing DB-only revocation path from claiming external bytes
+-- were erased, including bytes that were signed but never queued for indexing.
+CREATE FUNCTION app.device_has_staged_upload(requested_device UUID)
+RETURNS BOOLEAN
+LANGUAGE SQL STABLE SECURITY DEFINER SET search_path = pg_catalog, app
+AS $$
+    SELECT EXISTS (
+        SELECT 1
+        FROM app.devices AS d
+        JOIN app.device_upload_reservations AS r
+          ON r.workspace_id = d.workspace_id AND r.device_id = d.id
+        WHERE d.workspace_id = app.current_workspace_id()
+          AND d.user_id = app.current_user_id()
+          AND d.id = requested_device
+    );
+$$;
+ALTER FUNCTION app.device_has_staged_upload(UUID) OWNER TO app_migrator;
+REVOKE ALL ON FUNCTION app.device_has_staged_upload(UUID) FROM PUBLIC, app_worker, app_audit_reader;
+GRANT EXECUTE ON FUNCTION app.device_has_staged_upload(UUID) TO app_api;

@@ -20,6 +20,7 @@ from universal_ai_search.auth.local_account_export import (
     ExportMissing,
     LocalAccountExportStore,
 )
+from universal_ai_search.auth.reauth_store import ReauthScope
 from universal_ai_search.connections.disconnect import (
     ConnectionDisconnectStore,
     DisconnectMissing,
@@ -41,6 +42,10 @@ from universal_ai_search.devices.revocation import (
     DeviceRevocationStore,
     DeviceRevocationUnavailable,
 )
+from universal_ai_search.devices.upload_index_operation import (
+    read_native_upload_index_operation,
+)
+from universal_ai_search.devices.uploads import UploadUnavailable
 from universal_ai_search.search.source_deletion import SourceDeletionStore
 from universal_ai_search.search.source_reindex import SourceReindexStore
 
@@ -52,6 +57,7 @@ from .connection_disconnect import (
 from .connections import _require_csrf
 from .conversations import _scope, _unavailable
 from .device_revocation import DeviceDeletionResponse, device_operation
+from .device_upload_completion import index_operation
 from .job_operations import JobOperationResponse, get_job_operation
 from .local_account_export import AccountExportResponse, export_operation, export_scope
 from .source_deletion import SourceDeletionResponse, read_source_deletion_operation
@@ -264,6 +270,23 @@ async def read_conversation_deletion_operation(
                 pass
             else:
                 return export_operation(export, response)
+        if getattr(request.app.state, "device_upload_completion", None) is not None:
+            try:
+                upload = await read_native_upload_index_operation(
+                    request.app.state.database_engine,
+                    scope=ReauthScope(
+                        scope.user_id,
+                        scope.session_id,
+                        scope.workspace_id,
+                        scope.user_version,
+                        scope.workspace_version,
+                    ),
+                    operation_id=operation_id,
+                )
+            except UploadUnavailable:
+                raise _unavailable() from None
+            if upload is not None:
+                return index_operation(upload, response)
         return await get_job_operation(
             request, response, operation_id, workspace.workspace_id, workspace.user_id
         )

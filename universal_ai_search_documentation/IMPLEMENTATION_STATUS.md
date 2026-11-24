@@ -35,7 +35,7 @@ shells are never counted as finished user features.
 | `02_SYSTEM_ARCHITECTURE.md` | Complete | Partial | Local topology, schema ordering, fail-closed HTTP boundaries, workspace authentication/authorization, durable Gmail/Drive/selected-GitHub indexing, and hybrid search exist. Desktop sync, model streaming, provider management UI, and remaining product services are open. |
 | `03_SEARCH_ENGINE_DESIGN.md` | Complete | Local-index backend implemented; product phase partial | PostgreSQL exact/FTS/pgvector/trigram retrieval, typed filters, RRF, deterministic ranking, bounded extractive claims/citations, history, and safe empty answers pass unit and local PostgreSQL tests. Signed-in web results support workspace and provider filters. Production semantic/model adapters, full filter and answer UI, evaluation, and cache remain. |
 | `04_DATABASE_SCHEMA.md` | Complete | Database runtime implemented; phase partial | Alembic creates `33/33` specified tables. The runtime adds GitHub authorization and sync migrations to the prior index/Gmail/Drive claim functions and forced RLS. Compose migrates before API startup; readiness checks revision `0009_github_sync_runtime`. Seed data, backup automation, and Phase 3 review remain. |
-| `05_API_SPECIFICATION.md` | Complete | API platform and selected product routes implemented | FastAPI provides OpenAPI 3.1, strict serialization, RFC 9457 problems, signed cursors, idempotency primitives, and workspace authentication. `47/49` catalogued product operations are wired. The API coverage script reports method/path availability separately from unsupported subcases and end-to-end verification. The extractive SSE route is tested against PostgreSQL; broad rate limiting and two storage operations remain open. |
+| `05_API_SPECIFICATION.md` | Complete | API platform and selected product routes implemented | FastAPI provides OpenAPI 3.1, strict serialization, RFC 9457 problems, signed cursors, idempotency primitives, and workspace authentication. `49/49` catalogued product operations are wired. The API coverage script reports method/path availability separately from unsupported subcases and end-to-end verification. The extractive SSE route is tested against PostgreSQL; broad rate limiting and production provider/subcase verification remain open. |
 | `06_CONNECTOR_FRAMEWORK.md` | Complete | Gmail and selected-root Drive backend phases complete; provider ecosystem partial | The GitHub backend now verifies selected-repository grants, ingests bounded repository and discussion snapshots, reconciles absence after success, and closes visibility on failed verification. Desktop has a bounded scanner core. Live provider checks, native desktop sync, Drive change polling, and shared operational controls remain. |
 | `07_INDEXING_PIPELINE.md` | Complete | Normalized text/Markdown and bounded provider extraction paths implemented | Deterministic chunking/deduplication, local embeddings, durable leases, atomic promotion, unchanged skips and deletion purging pass unit and local PostgreSQL tests. Drive PDF/DOCX/XLSX/PPTX and bounded GitHub repository/discussion data feed the index. Desktop indexing handoff and production embedding providers remain open. |
 | `08_SECURITY_AND_PRIVACY.md` | Complete | Partial controls | The threat model, data classification, tenant/cryptographic boundaries, browser/input/model defenses, audit/redaction policy, deletion/backup rules, and security release gates are implementation-ready. Existing RLS, strict API boundaries, secret validation, and containerized tests implement only part of the required controls. |
@@ -433,13 +433,16 @@ can narrow existing GitHub grants only. No provider scopes are widened.
 Opt-in device liveness checks authenticate exact request bytes and claim a
 replay nonce. Active local-file devices and folder grants can submit bounded
 metadata manifests with durable idempotency and immutable upload intents.
-No object URL is minted; a tested upload reservation boundary checks exact
-metadata, replay, and quotas, but the signer and completion routes remain
-unwired. Before enabling them, verify on isolated S3-compatible storage that
-the staging credentials cannot replace or delete an uploaded object, that
-incorrect checksums, sizes, and content types fail, and that completion checks
-the exact staged object before triggering indexing. The disposable object
-server could not start in the test environment, so these checks were not run.
+The opt-in test upload path signs an exact conditional HTTPS PUT against
+verified write-once private staging. Completion validates and pins the
+immutable object version, then creates an owner-private indexing operation.
+The worker rechecks device and folder authorization, verifies actual UTF-8
+file bytes and promotes through the existing indexing pipeline. Supported
+uploads are one plain-text, Markdown, or CSV file up to 512 KiB per batch.
+These API routes require an explicitly composed test host, verified signing
+policy, separate restricted reader, and indexing worker. They are disabled
+by default and not a production deployment. Physical purge of staged
+objects and staging quota reclamation remain open.
 
 Verification resend issues only hashed replacement proofs for pending accounts
 and returns one generic response. Device revocation completes bounded

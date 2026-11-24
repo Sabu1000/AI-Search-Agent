@@ -61,7 +61,7 @@ def test_empty_database_upgrade_creates_exact_catalog(
     }
     assert tables == EXPECTED_TABLES
     assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-        "0022_device_upload_completion",
+        "0023_device_upload_index",
     )
 
 

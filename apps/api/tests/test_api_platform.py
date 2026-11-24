@@ -103,6 +103,7 @@ def test_openapi_is_31_and_only_completed_product_routes_are_open() -> None:
         "/v1/devices/{device_id}/heartbeat",
         "/v1/devices/{device_id}/manifests",
         "/v1/devices/{device_id}/uploads:sign",
+        "/v1/devices/{device_id}/changes",
         "/v1/search",
         "/v1/search/history",
         "/v1/search/suggestions",

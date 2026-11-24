@@ -1,4 +1,4 @@
-"""Accept a signed one-upload changes batch without claiming search indexing."""
+"""Accept a signed one-upload changes batch and return a durable indexing operation."""
 
 from __future__ import annotations
 
@@ -22,13 +22,21 @@ from universal_ai_search.devices.upload_completion import (
     DeviceUploadCompletion,
     VerifiedChange,
 )
+from universal_ai_search.devices.upload_index_operation import (
+    NativeUploadIndexOperation,
+)
 from universal_ai_search.devices.uploads import (
     UploadRejected,
     UploadRequestInvalid,
     UploadUnavailable,
 )
 
-from .job_operations import JobOperation, JobOperationResponse, JobProgress
+from .job_operations import (
+    JobOperation,
+    JobOperationResponse,
+    JobProgress,
+    SafeJobError,
+)
 
 router = APIRouter(prefix="/devices", tags=["devices"])
 _HEADERS = {"Cache-Control": "private, no-store"}
@@ -68,13 +76,43 @@ def change_operation(
     return JobOperationResponse(
         operation=JobOperation(
             id=receipt.id,
-            type="device_upload_verification",
-            status="completed",
-            progress=JobProgress(completed=1, total=1, unit="verified_uploads"),
-            created_at=receipt.created_at,
-            started_at=receipt.created_at,
-            completed_at=receipt.completed_at,
+            type="device_upload_index",
+            status="pending",
+            progress=JobProgress(completed=0, total=1, unit="indexed_uploads"),
+            created_at=receipt.completed_at,
             links={"self": f"/v1/operations/{receipt.id}"},
+        )
+    )
+
+
+def index_operation(
+    operation: NativeUploadIndexOperation, response: Response
+) -> JobOperationResponse:
+    response.headers.update(_HEADERS)
+    return JobOperationResponse(
+        operation=JobOperation(
+            id=operation.id,
+            type="device_upload_index",
+            status=operation.status,
+            progress=JobProgress(
+                completed=int(operation.status == "completed"),
+                total=1,
+                unit="indexed_uploads",
+            ),
+            created_at=operation.created_at,
+            started_at=operation.started_at,
+            completed_at=operation.completed_at,
+            error=(
+                SafeJobError(
+                    code=operation.error_code,
+                    detail="The verified local upload could not be indexed.",
+                    retryable=operation.status == "retry_wait",
+                    recovery_action=None,
+                )
+                if operation.error_code is not None
+                else None
+            ),
+            links={"self": f"/v1/operations/{operation.id}"},
         )
     )
 

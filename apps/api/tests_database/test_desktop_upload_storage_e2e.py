@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import os
 import ssl
 from importlib import import_module
-from uuid import uuid4
+from typing import cast
+from uuid import UUID, uuid4
 
 import httpx
 import psycopg
@@ -17,12 +19,30 @@ from test_device_manifest_runtime import _body, _folder, _signed
 from test_device_registration_runtime import _b64url, _complete, _engine, _scope
 
 from universal_ai_search.api.app import create_app
+from universal_ai_search.auth.reauth_store import ReauthScope
 from universal_ai_search.config import Settings
 from universal_ai_search.devices.registration import DeviceRegistrationService
 from universal_ai_search.devices.registration_store import (
     SQLAlchemyDeviceRegistrationStore,
 )
-from universal_ai_search.devices.upload_signer import VerifiedS3UploadSigner
+from universal_ai_search.devices.staging_read import (
+    S3HeadClient,
+    S3VersionedStageReader,
+)
+from universal_ai_search.devices.upload_index import S3PinnedGetClient
+from universal_ai_search.devices.upload_index_operation import (
+    read_native_upload_index_operation,
+)
+from universal_ai_search.devices.upload_index_runtime import (
+    build_native_upload_index_runtime,
+)
+from universal_ai_search.devices.upload_signer import (
+    S3PresignClient,
+    VerifiedS3UploadSigner,
+)
+from universal_ai_search.indexing.pipeline import IndexingPipeline
+from universal_ai_search.indexing.repository import IndexRepository
+from universal_ai_search.indexing.runtime import IndexingRuntime
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("UAS_VERIFY_S3_CA"),
@@ -60,7 +80,7 @@ def sdk(key: str, secret: str) -> object:
 
 
 @pytest.mark.asyncio
-async def test_signed_device_receives_real_one_write_upload_url(
+async def test_signed_device_upload_and_verified_indexing(
     connection: psycopg.Connection[tuple[object, ...]],
 ) -> None:
     settings = Settings(
@@ -70,10 +90,6 @@ async def test_signed_device_receives_real_one_write_upload_url(
             "postgresql://", "postgresql+asyncpg://"
         ),
     )
-    from typing import cast
-
-    from universal_ai_search.devices.upload_signer import S3PresignClient
-
     signer = VerifiedS3UploadSigner(
         cast(
             S3PresignClient,
@@ -85,7 +101,15 @@ async def test_signed_device_receives_real_one_write_upload_url(
         access_key_id=os.environ["UAS_VERIFY_S3_ACCESS_KEY"],
         region="us-east-1",
     )
-    app = create_app(settings, device_upload_signer=signer)
+    reader = sdk("UAS_VERIFY_S3_READ_KEY", "UAS_VERIFY_S3_READ_SECRET")
+    bucket = os.environ["UAS_OBJECT_STORAGE_BUCKET"]
+    app = create_app(
+        settings,
+        device_upload_signer=signer,
+        device_upload_stage_reader=S3VersionedStageReader(
+            cast(S3HeadClient, reader), bucket=bucket
+        ),
+    )
     signing_key = settings.auth_hash_key.get_secret_value().encode()
     scope = _scope(connection)
     engine = _engine()
@@ -169,6 +193,39 @@ async def test_signed_device_receives_real_one_write_upload_url(
                 )
             assert uploaded.status_code == 200
             assert duplicate.status_code in {409, 412}
+            change_id = uuid4()
+            change = {"change_batch_id": str(change_id), "upload_ids": [upload_id]}
+            accepted = await post(target + "/changes", change)
+            assert accepted.status_code == 202, ("changes", accepted.json().get("code"))
+            operation = accepted.json()["operation"]
+            assert operation["status"] == "pending"
+            assert operation["type"] == "device_upload_index"
+            replay = await post(target + "/changes", change)
+            assert replay.status_code == 202
+            assert replay.json()["operation"]["id"] == operation["id"]
+        operation_id = UUID(operation["id"])
+        receipt_scope = ReauthScope(
+            scope.user_id, scope.session_id, scope.workspace_id, 1, 1
+        )
+        pending = await read_native_upload_index_operation(
+            app.state.database_engine, scope=receipt_scope, operation_id=operation_id
+        )
+        assert pending is not None and pending.status == "pending"
+
+        staged = build_native_upload_index_runtime(
+            settings.database_url, cast(S3PinnedGetClient, reader), bucket
+        )
+        indexing = IndexingRuntime(
+            IndexRepository(settings.database_url), IndexingPipeline()
+        )
+        assert await asyncio.to_thread(staged.run_once, "fixture-staging")
+        assert await asyncio.to_thread(indexing.run_once, "fixture-indexing")
+        complete = await read_native_upload_index_operation(
+            app.state.database_engine, scope=receipt_scope, operation_id=operation_id
+        )
+        assert complete is not None and complete.status == "completed", (
+            None if complete is None else complete.error_code
+        )
     finally:
         await app.state.database_engine.dispose()
         await engine.dispose()

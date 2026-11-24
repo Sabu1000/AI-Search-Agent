@@ -22,6 +22,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.execute("DROP FUNCTION app.device_has_staged_upload(UUID)")
     op.execute(
         "DROP FUNCTION app.read_device_upload_change(UUID,UUID,UUID,UUID,BIGINT,BIGINT)"
     )

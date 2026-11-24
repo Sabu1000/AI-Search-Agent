@@ -8,6 +8,7 @@ from uuid import UUID, uuid4
 import psycopg
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from sqlalchemy import text
 from test_device_manifest_runtime import _body, _folder, _signed
 from test_device_registration_runtime import _HASH_KEY, _complete, _engine, _scope
 
@@ -152,6 +153,29 @@ async def test_upload_manifest_scope_constraints_quota_and_non_extensible_grant(
         winner_nonce = 4 if winner.upload_id == intent1 else 5
         loser_nonce = 5 if winner.upload_id == intent1 else 4
         assert await post_upload(winner_body, 6) == winner
+        async with engine.begin() as guarded:
+            params = {
+                "workspace": str(scope.workspace_id),
+                "actor": str(scope.user_id),
+                "device": grant.device_id,
+            }
+            await guarded.execute(
+                text(
+                    "SELECT set_config('app.workspace_id', :workspace, true), "
+                    "set_config('app.user_id', :actor, true)"
+                ),
+                params,
+            )
+            check = text("SELECT app.device_has_staged_upload(:device)")
+            assert await guarded.scalar(check, params) is True
+            await guarded.execute(
+                text(
+                    "SELECT set_config('app.workspace_id', :workspace, true), "
+                    "set_config('app.user_id', :actor, true)"
+                ),
+                {"workspace": str(other.workspace_id), "actor": str(other.user_id)},
+            )
+            assert await guarded.scalar(check, params) is False
         for body, nonce in ((winner_body, winner_nonce), (loser_body, loser_nonce)):
             with pytest.raises(UploadRejected):
                 await post_upload(body, nonce)

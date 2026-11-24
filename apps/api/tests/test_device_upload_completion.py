@@ -85,7 +85,7 @@ class _Store(ManifestMemoryStore):
         return self.verified
 
 
-def test_route_binds_rendered_bytes_and_reports_verification_not_indexing() -> None:
+def test_route_binds_rendered_bytes_and_reports_pending_indexing() -> None:
     store = _Store()
     app = FastAPI()
     reader = type("MockReader", (), {})()
@@ -115,8 +115,9 @@ def test_route_binds_rendered_bytes_and_reports_verification_not_indexing() -> N
     assert response.status_code == 202 and store.completed
     assert response.headers["cache-control"] == "private, no-store"
     operation = response.json()["operation"]
-    assert operation["type"] == "device_upload_verification"
-    assert operation["progress"]["unit"] == "verified_uploads"
+    assert operation["status"] == "pending"
+    assert operation["type"] == "device_upload_index"
+    assert operation["progress"]["unit"] == "indexed_uploads"
     assert "immutable-version" not in response.text and _OBJECT not in response.text
     assert response.json() == client.post(target, content=raw, headers=headers).json()
     assert reader.get.await_count == 2

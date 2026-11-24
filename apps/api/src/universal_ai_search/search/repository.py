@@ -35,8 +35,26 @@ _ELIGIBLE = """
     source.workspace_id = :workspace_id
     AND source.state = 'active' AND source.deleted_at IS NULL
     AND connection.status = 'active'
-    AND (source.provider <> 'local_files'
-         OR connection.owner_user_id = app.current_user_id())
+    AND (source.provider <> 'local_files' OR (
+         connection.owner_user_id = app.current_user_id()
+         AND (NOT (source.metadata ? 'local_upload_id') OR (
+            version.content_hash = source.content_hash
+            AND EXISTS (
+                SELECT 1 FROM app.devices AS native_device
+                JOIN app.device_folders AS native_folder
+                  ON native_folder.workspace_id = native_device.workspace_id
+                 AND native_folder.device_id = native_device.id
+                WHERE native_device.workspace_id = source.workspace_id
+                  AND native_device.connection_id = connection.id
+                  AND native_device.user_id = connection.owner_user_id
+                  AND native_device.id::text = source.metadata->>'local_device_id'
+                  AND native_folder.id::text = source.metadata->>'local_folder_id'
+                  AND native_device.status = 'active'
+                  AND native_device.revoked_at IS NULL
+                  AND native_folder.status = 'active'
+            )
+         ))
+    ))
     AND (
       source.provider <> 'github' OR EXISTS (
           SELECT 1 FROM app.source_collection_memberships AS association
