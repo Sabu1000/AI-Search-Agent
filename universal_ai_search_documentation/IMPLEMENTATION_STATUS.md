@@ -330,6 +330,14 @@ Drive master tasks complete: `10/10`: `P6-001` through `P6-010`. The tested
 selected-root backend milestone passes its
 [phase review](DRIVE_PHASE_REVIEW.md); GitHub App authorization (`P7-001`) is next.
 
+The first `P7-001` slice adds a GitHub App HTTP gateway with PKCE code
+exchange, selected-installation and user repository checks, and in-memory
+short-lived installation tokens restricted to explicit repository IDs and
+read-only permissions. Synthetic provider tests exercise the gateway.
+The start/callback routes, single-use state and workspace binding, durable
+repository grants, and provider integration tests remain open. No live GitHub
+App credentials or unsolicited repository access are required for these tests.
+
 ## Explicitly unimplemented inventory
 
 The following do not exist in production code yet:

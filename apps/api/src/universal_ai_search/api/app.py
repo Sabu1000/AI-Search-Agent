@@ -41,7 +41,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         title="Universal AI Search API",
         summary="Read-only, cited search across user-approved sources.",
         version=__version__,
-        openapi_version="3.1.0",
         lifespan=_lifespan,
     )
     engine = create_async_engine(
