@@ -338,7 +338,21 @@ The opt-in start/callback routes, encrypted single-use workspace/session
 state, and audited PostgreSQL repository grants now exist. A verified
 connection is saved as pending and carries no provider token. No live
 GitHub App credentials are required for the synthetic tests. Live sandbox
-verification and the sync/reconciliation handoff are still open.
+verification and the full webhook/revocation lifecycle are still open.
+
+A selected repository now queues a bounded sync. The worker reads a pinned
+default-branch snapshot plus bounded issue/PR discussions, then atomically
+stages content for indexing, records repository visibility, and reconciles
+absent sources. Failed scans never reconcile absence and close the
+repository's search visibility; verified search authority expires when
+polling stops. The raw webhook verifier is implemented independently; HTTP
+delivery persistence is not yet connected. These gates are covered by
+synthetic provider tests and local PostgreSQL, not live GitHub.
+
+The signed-in web shell now supports scoped result search with workspace and
+provider filters. The desktop includes a bounded selected-root scanner for
+safe text fixtures, not a complete native sync path. Neither partial slice
+changes the end-to-end MVP acceptance count.
 
 ## Explicitly unimplemented inventory
 

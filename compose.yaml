@@ -168,6 +168,9 @@ services:
       UAS_GOOGLE_OAUTH_ENABLED: ${UAS_GOOGLE_OAUTH_ENABLED:-false}
       UAS_GOOGLE_CLIENT_ID: ${UAS_GOOGLE_CLIENT_ID:-}
       UAS_GOOGLE_CLIENT_SECRET: ${UAS_GOOGLE_CLIENT_SECRET:-}
+      UAS_GITHUB_APP_ENABLED: ${UAS_GITHUB_APP_ENABLED:-false}
+      UAS_GITHUB_APP_ID: ${UAS_GITHUB_APP_ID:-0}
+      UAS_GITHUB_PRIVATE_KEY_PEM: ${UAS_GITHUB_PRIVATE_KEY_PEM:-}
     depends_on:
       migrate:
         condition: service_completed_successfully

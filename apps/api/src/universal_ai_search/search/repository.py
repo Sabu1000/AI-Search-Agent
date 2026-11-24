@@ -165,6 +165,20 @@ class SearchRepository:
             {embedding_join}
             WHERE source.state = 'active' AND source.deleted_at IS NULL
               AND connection.status = 'active'
+              AND (source.provider <> 'github' OR EXISTS (
+                  SELECT 1 FROM app.source_collection_memberships AS association
+                  JOIN app.source_collections AS selection
+                    ON selection.workspace_id = association.workspace_id
+                   AND selection.connection_id = association.connection_id
+                   AND selection.id = association.collection_id
+                  WHERE association.workspace_id = source.workspace_id
+                    AND association.connection_id = source.connection_id
+                    AND association.source_id = source.id
+                    AND selection.kind = 'repository'
+                    AND selection.selected AND selection.status = 'active'
+                    AND selection.github_verified_at >
+                        statement_timestamp() - INTERVAL '15 minutes'
+              ))
               AND version.state = 'ready'
               AND source.current_document_version_id = version.id
               {filters}

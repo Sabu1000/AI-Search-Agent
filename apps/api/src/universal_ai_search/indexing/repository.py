@@ -92,198 +92,232 @@ class IndexRepository:
     def enqueue(
         self, workspace_id: UUID, connection_id: UUID, document: NormalizedDocument
     ) -> EnqueueResult:
+        with psycopg.connect(self._database_url, row_factory=dict_row) as connection:
+            self._set_worker_context(connection, workspace_id)
+            return self.enqueue_in_transaction(
+                connection, workspace_id, connection_id, document
+            )
+
+    @staticmethod
+    def enqueue_in_transaction(
+        connection: psycopg.Connection[dict[str, object]],
+        workspace_id: UUID,
+        connection_id: UUID,
+        document: NormalizedDocument,
+    ) -> EnqueueResult:
+        """Enqueue inside a trusted worker RLS transaction and held claim."""
         content_hash = bytes.fromhex(document.content_hash)
         permissions_hash = bytes.fromhex(document.permissions_hash)
         source_id = uuid5(connection_id, document.external_id)
-        with psycopg.connect(self._database_url, row_factory=dict_row) as connection:
-            self._set_worker_context(connection, workspace_id)
-            account = connection.execute(
-                "SELECT provider, status FROM app.connections "
-                "WHERE workspace_id = %s AND id = %s FOR UPDATE",
-                (workspace_id, connection_id),
-            ).fetchone()
-            provider = document.provider.value
-            if account is None or account["status"] != "active":
-                raise ValueError("connection is not active")
-            provider_matches = account["provider"] == provider or (
-                account["provider"] == "google"
-                and provider in {"gmail", "google_drive"}
-            )
-            if not provider_matches:
-                raise ValueError("connector provider does not match connection")
+        account = connection.execute(
+            "SELECT provider, status FROM app.connections "
+            "WHERE workspace_id = %s AND id = %s FOR UPDATE",
+            (workspace_id, connection_id),
+        ).fetchone()
+        provider = document.provider.value
+        if account is None or account["status"] != "active":
+            raise ValueError("connection is not active")
+        provider_matches = account["provider"] == provider or (
+            account["provider"] == "google" and provider in {"gmail", "google_drive"}
+        )
+        if not provider_matches:
+            raise ValueError("connector provider does not match connection")
 
-            profile = connection.execute(
-                "SELECT id FROM app.embedding_profiles WHERE status = 'active' "
-                "AND provider = 'local' AND model = %s",
-                (EMBEDDING_MODEL,),
-            ).fetchone()
-            if profile is None:
-                raise RuntimeError("no active embedding profile")
-            profile_id = int(profile["id"])
-            key = version_key(
-                source_id=source_id,
-                content_hash=content_hash,
-                permissions_hash=permissions_hash,
-                profile_id=profile_id,
-            )
-            version_id = document_version_id(source_id, key)
+        profile = connection.execute(
+            "SELECT id FROM app.embedding_profiles WHERE status = 'active' "
+            "AND provider = 'local' AND model = %s",
+            (EMBEDDING_MODEL,),
+        ).fetchone()
+        if profile is None:
+            raise RuntimeError("no active embedding profile")
+        profile_id = cast(int, profile["id"])
+        key = version_key(
+            source_id=source_id,
+            content_hash=content_hash,
+            permissions_hash=permissions_hash,
+            profile_id=profile_id,
+        )
+        base_version_id = document_version_id(source_id, key)
+        deleted = connection.execute(
+            "SELECT lock_version FROM app.sources WHERE id = %s AND state = 'deleted'",
+            (source_id,),
+        ).fetchone()
+        version_id = (
+            base_version_id
+            if deleted is None
+            else uuid5(base_version_id, f"restored:{deleted['lock_version']}")
+        )
 
-            timestamp = document.modified_at or document.created_at
-            timestamp_kind = (
-                "modified"
-                if document.modified_at
-                else (
-                    "sent"
-                    if timestamp and document.source_type == "email"
-                    else "created" if timestamp else None
-                )
+        timestamp = document.modified_at or document.created_at
+        timestamp_kind = (
+            "modified"
+            if document.modified_at
+            else (
+                "sent"
+                if timestamp and document.source_type == "email"
+                else "created" if timestamp else None
             )
-            extension_source = (
-                document.title
-                if document.source_type in {"attachment", "file"}
-                else document.external_id
-            )
-            extension = PurePosixPath(extension_source).suffix.lstrip(".")[:50] or None
-            authors = ", ".join(document.authors)[:500] or None
-            connection.execute(
-                """INSERT INTO app.sources (
-                    id, workspace_id, connection_id, provider, external_id,
-                    source_type, title, mime_type, file_extension, canonical_url,
-                    author_display, source_timestamp, source_timestamp_kind,
-                    content_hash, permissions_hash, state, metadata
-                ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s, 'active', %s::JSONB
-                ) ON CONFLICT (connection_id, external_id) DO UPDATE SET
-                    title = EXCLUDED.title, mime_type = EXCLUDED.mime_type,
-                    file_extension = EXCLUDED.file_extension,
-                    canonical_url = EXCLUDED.canonical_url,
-                    author_display = EXCLUDED.author_display,
-                    source_timestamp = EXCLUDED.source_timestamp,
-                    source_timestamp_kind = EXCLUDED.source_timestamp_kind,
-                    content_hash = EXCLUDED.content_hash,
-                    permissions_hash = EXCLUDED.permissions_hash,
-                    state = 'active', metadata = EXCLUDED.metadata,
-                    updated_at = clock_timestamp(),
-                    lock_version = app.sources.lock_version + 1
-                """,
-                (
-                    source_id,
-                    workspace_id,
-                    connection_id,
-                    provider,
-                    document.external_id,
-                    _source_type(document.source_type),
-                    document.title,
-                    document.mime_type,
-                    extension,
-                    document.canonical_url,
-                    authors,
-                    timestamp,
-                    timestamp_kind,
-                    content_hash,
-                    permissions_hash,
-                    json.dumps(document.provider_metadata),
-                ),
-            )
-            connection.execute(
-                "DELETE FROM app.source_people WHERE workspace_id = %s "
-                "AND source_id = %s",
-                (workspace_id, source_id),
-            )
-            for person in sorted(
-                document.people,
-                key=lambda item: (
-                    item.relationship,
-                    item.identity_kind,
-                    item.normalized_identifier,
-                ),
-            ):
-                person_id = uuid5(
-                    source_id,
-                    ":".join(
-                        (
-                            person.relationship,
-                            person.identity_kind,
-                            person.normalized_identifier,
-                        )
-                    ),
-                )
-                connection.execute(
-                    """INSERT INTO app.source_people (
-                        id, workspace_id, source_id, relationship, identity_kind,
-                        normalized_identifier, display_name
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+        )
+        extension_source = (
+            document.title
+            if document.source_type in {"attachment", "file"}
+            else document.external_id
+        )
+        extension = PurePosixPath(extension_source).suffix.lstrip(".")[:50] or None
+        authors = ", ".join(document.authors)[:500] or None
+        connection.execute(
+            """INSERT INTO app.sources (
+                id, workspace_id, connection_id, provider, external_id,
+                source_type, title, mime_type, file_extension, canonical_url,
+                author_display, source_timestamp, source_timestamp_kind,
+                content_hash, permissions_hash, state, metadata
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s, 'active', %s::JSONB
+            ) ON CONFLICT (connection_id, external_id) DO UPDATE SET
+                title = EXCLUDED.title, mime_type = EXCLUDED.mime_type,
+                file_extension = EXCLUDED.file_extension,
+                canonical_url = EXCLUDED.canonical_url,
+                author_display = EXCLUDED.author_display,
+                source_timestamp = EXCLUDED.source_timestamp,
+                source_timestamp_kind = EXCLUDED.source_timestamp_kind,
+                content_hash = EXCLUDED.content_hash,
+                permissions_hash = EXCLUDED.permissions_hash,
+                state = 'active', deleted_at = NULL, metadata = EXCLUDED.metadata,
+                updated_at = clock_timestamp(),
+                lock_version = app.sources.lock_version + 1
+            """,
+            (
+                source_id,
+                workspace_id,
+                connection_id,
+                provider,
+                document.external_id,
+                _source_type(document.source_type),
+                document.title,
+                document.mime_type,
+                extension,
+                document.canonical_url,
+                authors,
+                timestamp,
+                timestamp_kind,
+                content_hash,
+                permissions_hash,
+                json.dumps(document.provider_metadata),
+            ),
+        )
+        connection.execute(
+            "DELETE FROM app.source_people WHERE workspace_id = %s "
+            "AND source_id = %s",
+            (workspace_id, source_id),
+        )
+        for person in sorted(
+            document.people,
+            key=lambda item: (
+                item.relationship,
+                item.identity_kind,
+                item.normalized_identifier,
+            ),
+        ):
+            person_id = uuid5(
+                source_id,
+                ":".join(
                     (
-                        person_id,
-                        workspace_id,
-                        source_id,
                         person.relationship,
                         person.identity_kind,
                         person.normalized_identifier,
-                        person.display_name,
-                    ),
-                )
+                    )
+                ),
+            )
+            connection.execute(
+                """INSERT INTO app.source_people (
+                    id, workspace_id, source_id, relationship, identity_kind,
+                    normalized_identifier, display_name
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                (
+                    person_id,
+                    workspace_id,
+                    source_id,
+                    person.relationship,
+                    person.identity_kind,
+                    person.normalized_identifier,
+                    person.display_name,
+                ),
+            )
 
-            current = connection.execute(
-                "SELECT version.id FROM app.sources AS source "
-                "JOIN app.document_versions AS version "
-                "ON version.id = source.current_document_version_id "
-                "WHERE source.id = %s AND version.version_key = %s "
-                "AND version.state = 'ready'",
+        current = connection.execute(
+            "SELECT version.id FROM app.sources AS source "
+            "JOIN app.document_versions AS version "
+            "ON version.id = source.current_document_version_id "
+            "WHERE source.id = %s AND version.version_key = %s "
+            "AND version.state = 'ready'",
+            (source_id, key),
+        ).fetchone()
+        if current is not None:
+            return EnqueueResult(
+                EnqueueStatus.UNCHANGED, source_id, cast(UUID, current["id"]), None
+            )
+
+        created = connection.execute(
+            """INSERT INTO app.document_versions (
+                id, workspace_id, source_id, version_key, state,
+                normalized_text, language, parser_version, chunker_version,
+                content_hash, permissions_hash, token_count, extracted_bytes
+            ) VALUES (
+                %s, %s, %s, %s, 'pending', %s, 'und', %s, %s,
+                %s, %s, 0, 0
+            ) ON CONFLICT (source_id, version_key) DO NOTHING RETURNING id""",
+            (
+                version_id,
+                workspace_id,
+                source_id,
+                key,
+                document.content,
+                PARSER_VERSION,
+                CHUNKER_VERSION,
+                content_hash,
+                permissions_hash,
+            ),
+        ).fetchone()
+        if created is None:
+            existing_version = connection.execute(
+                "SELECT id FROM app.document_versions WHERE source_id = %s "
+                "AND version_key = %s",
                 (source_id, key),
             ).fetchone()
-            if current is not None:
-                return EnqueueResult(
-                    EnqueueStatus.UNCHANGED, source_id, current["id"], None
-                )
-
-            connection.execute(
-                """INSERT INTO app.document_versions (
-                    id, workspace_id, source_id, version_key, state,
-                    normalized_text, language, parser_version, chunker_version,
-                    content_hash, permissions_hash, token_count, extracted_bytes
-                ) VALUES (
-                    %s, %s, %s, %s, 'pending', %s, 'und', %s, %s,
-                    %s, %s, 0, 0
-                ) ON CONFLICT (source_id, version_key) DO NOTHING""",
-                (
-                    version_id,
-                    workspace_id,
-                    source_id,
-                    key,
-                    document.content,
-                    PARSER_VERSION,
-                    CHUNKER_VERSION,
-                    content_hash,
-                    permissions_hash,
-                ),
-            )
-            job_id = uuid5(version_id, "index-job")
-            payload = json.dumps(
-                {
-                    "document_version_id": str(version_id),
-                    "embedding_profile_id": profile_id,
-                    "embedding_model": EMBEDDING_MODEL,
-                }
-            )
-            connection.execute(
-                """INSERT INTO app.jobs (
-                    id, workspace_id, connection_id, source_id, job_type, queue,
-                    idempotency_key, status, payload
-                ) VALUES (
-                    %s, %s, %s, %s, 'index', 'index', %s, 'pending', %s::JSONB
-                ) ON CONFLICT (workspace_id, job_type, idempotency_key) DO NOTHING""",
-                (
-                    job_id,
-                    workspace_id,
-                    connection_id,
-                    source_id,
-                    f"index:{key.hex()}",
-                    payload,
-                ),
-            )
-            return EnqueueResult(EnqueueStatus.QUEUED, source_id, version_id, job_id)
+            if existing_version is None:
+                raise RuntimeError("index version conflict could not be resolved")
+            version_id = cast(UUID, existing_version["id"])
+        job_id = uuid5(version_id, "index-job")
+        idempotency_key = (
+            f"index:{key.hex()}"
+            if version_id == base_version_id
+            else f"index-restored:{version_id}"
+        )
+        payload = json.dumps(
+            {
+                "document_version_id": str(version_id),
+                "embedding_profile_id": profile_id,
+                "embedding_model": EMBEDDING_MODEL,
+            }
+        )
+        connection.execute(
+            """INSERT INTO app.jobs (
+                id, workspace_id, connection_id, source_id, job_type, queue,
+                idempotency_key, status, payload
+            ) VALUES (
+                %s, %s, %s, %s, 'index', 'index', %s, 'pending', %s::JSONB
+            ) ON CONFLICT (workspace_id, job_type, idempotency_key) DO NOTHING""",
+            (
+                job_id,
+                workspace_id,
+                connection_id,
+                source_id,
+                idempotency_key,
+                payload,
+            ),
+        )
+        return EnqueueResult(EnqueueStatus.QUEUED, source_id, version_id, job_id)
 
     def tombstone(
         self, workspace_id: UUID, connection_id: UUID, external_id: str

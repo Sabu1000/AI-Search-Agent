@@ -6,10 +6,10 @@ import psycopg
 import pytest
 from conftest import database_dsn
 from sqlalchemy.ext.asyncio import create_async_engine
-from test_indexing_runtime import CONNECTION_ID, USER_ID, WORKSPACE_ID, seed_workspace
 from uas_connector_sdk import DocumentPerson, RawItem
 from uas_connector_sdk.testing import FakeConnector
 
+from test_indexing_runtime import CONNECTION_ID, USER_ID, WORKSPACE_ID, seed_workspace
 from universal_ai_search.indexing.pipeline import IndexingPipeline
 from universal_ai_search.indexing.repository import IndexRepository
 from universal_ai_search.indexing.runtime import IndexingRuntime
@@ -47,7 +47,22 @@ async def _indexed_document(
         }
     )
     repository = IndexRepository(database_dsn())
-    repository.enqueue(WORKSPACE_ID, CONNECTION_ID, document)
+    enqueued = repository.enqueue(WORKSPACE_ID, CONNECTION_ID, document)
+    collection_id = uuid4()
+    connection.execute(
+        """INSERT INTO app.source_collections
+           (id, workspace_id, connection_id, provider_external_id, kind, name,
+            selected, status, github_verified_at)
+           VALUES (%s, %s, %s, '1', 'repository', 'Demo', true, 'active', now())""",
+        (collection_id, WORKSPACE_ID, CONNECTION_ID),
+    )
+    connection.execute(
+        """INSERT INTO app.source_collection_memberships
+           (workspace_id, connection_id, source_id, collection_id, relationship)
+           VALUES (%s, %s, %s, %s, 'direct')""",
+        (WORKSPACE_ID, CONNECTION_ID, enqueued.source_id, collection_id),
+    )
+    connection.commit()
     assert IndexingRuntime(repository, IndexingPipeline()).run_once("search-test")
 
 

@@ -8,10 +8,16 @@ import psycopg
 import pytest
 from conftest import database_dsn
 from sqlalchemy.ext.asyncio import create_async_engine
+from uas_connector_sdk import RawItem
+from uas_connector_sdk.testing import FakeConnector
 
 from universal_ai_search.connections.crypto import EncryptedEnvelope
 from universal_ai_search.connections.github import GitHubAuthorizationError
 from universal_ai_search.connections.github_store import SQLAlchemyGitHubConnectionStore
+from universal_ai_search.sync.github_repository import (
+    GitHubSyncClaimError,
+    GitHubSyncRepository,
+)
 
 
 async def test_git_hub_grants_are_bound_to_verified_manager_session(
@@ -113,3 +119,85 @@ async def test_git_hub_grants_are_bound_to_verified_manager_session(
         "SELECT count(*) FROM app.audit_events WHERE workspace_id=%s",
         (workspace,),
     ).fetchone() == (1,)
+
+    runtime = GitHubSyncRepository(database_dsn())
+    claim = runtime.claim("github-test")
+    assert claim is not None
+    target = runtime.load(claim)
+    assert target.repository_id in {8, 10}
+    doc = await FakeConnector().normalize(
+        RawItem(
+            external_id="repo:1:gh-test.md",
+            payload={"title": "Repository test", "content": "Repository test content"},
+        )
+    )
+    with pytest.raises(GitHubSyncClaimError):
+        runtime.commit(claim, target, (doc,))
+    doc = doc.model_copy(
+        update={"provider_metadata": {"repository_id": target.repository_id}}
+    )
+    runtime.commit(claim, target, (doc,))
+    with pytest.raises(GitHubSyncClaimError):
+        runtime.commit(claim, target, (doc,))
+    assert (
+        connection.execute(
+            """SELECT github_verified_at IS NOT NULL FROM app.source_collections
+           WHERE id=%s""",
+            (target.collection_id,),
+        ).fetchone()
+        == (True,)
+    )
+    assert (
+        connection.execute(
+            """SELECT count(*) FROM app.source_collection_memberships
+           WHERE collection_id=%s""",
+            (target.collection_id,),
+        ).fetchone()
+        == (1,)
+    )
+
+    connection.execute(
+        """UPDATE app.jobs SET available_at = now() - interval '1 minute'
+           WHERE job_type = 'sync' AND status = 'pending'
+             AND payload ->> 'collection_id' = %s""",
+        (str(target.collection_id),),
+    )
+    connection.commit()
+    next_claim = runtime.claim("github-test")
+    assert next_claim is not None
+    assert runtime.load(next_claim) == target
+    runtime.commit(next_claim, target, ())
+    assert connection.execute(
+        "SELECT state FROM app.sources WHERE connection_id=%s", (connection_id,)
+    ).fetchone() == ("deleted",)
+    assert (
+        connection.execute(
+            """SELECT count(*) FROM app.document_versions v JOIN app.sources s
+           ON s.id=v.source_id WHERE s.connection_id=%s""",
+            (connection_id,),
+        ).fetchone()
+        == (0,)
+    )
+
+    connection.execute(
+        """UPDATE app.jobs SET available_at = now() - interval '2 minutes'
+           WHERE job_type = 'sync' AND status = 'pending'
+             AND payload ->> 'collection_id' = %s""",
+        (str(target.collection_id),),
+    )
+    connection.commit()
+    restored = runtime.claim("github-test")
+    assert restored is not None
+    runtime.commit(restored, target, (doc,))
+    assert connection.execute(
+        """SELECT state, deleted_at FROM app.sources WHERE connection_id=%s""",
+        (connection_id,),
+    ).fetchone() == ("active", None)
+    assert (
+        connection.execute(
+            """SELECT count(*) FROM app.jobs WHERE connection_id=%s AND job_type='index'
+           AND status = 'pending' AND idempotency_key LIKE 'index-restored:%%'""",
+            (connection_id,),
+        ).fetchone()
+        == (1,)
+    )

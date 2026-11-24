@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import hmac
+import json
 from datetime import datetime
-from uuid import UUID, uuid4
+from uuid import UUID, uuid4, uuid5
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -161,6 +162,7 @@ class SQLAlchemyGitHubConnectionStore:
                     for permission, level in READ_PERMISSIONS.items()
                 ],
             )
+            collections = {repo_id: uuid4() for repo_id in sorted(repository_ids)}
             await conn.execute(
                 text(
                     """INSERT INTO app.source_collections
@@ -172,11 +174,34 @@ class SQLAlchemyGitHubConnectionStore:
                 [
                     {
                         **params,
-                        "collection": uuid4(),
+                        "collection": collections[repo_id],
                         "external": str(repo_id),
                         "name": f"GitHub repository {repo_id}",
                     }
-                    for repo_id in sorted(repository_ids)
+                    for repo_id in collections
+                ],
+            )
+            await conn.execute(
+                text(
+                    """INSERT INTO app.jobs
+                       (id, workspace_id, connection_id, job_type, queue,
+                        idempotency_key, status, payload)
+                       VALUES (:job, :workspace, :id, 'sync', 'sync', :job_key,
+                               'pending', CAST(:payload AS JSONB))"""
+                ),
+                [
+                    {
+                        **params,
+                        "job": uuid5(collection_id, "github-initial-sync"),
+                        "job_key": f"github-initial:{collection_id}",
+                        "payload": json.dumps(
+                            {
+                                "mode": "github_repository",
+                                "collection_id": str(collection_id),
+                            }
+                        ),
+                    }
+                    for collection_id in collections.values()
                 ],
             )
             await conn.execute(

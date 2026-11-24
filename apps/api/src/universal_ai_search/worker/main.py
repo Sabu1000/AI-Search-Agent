@@ -8,12 +8,19 @@ from universal_ai_search import __version__
 from universal_ai_search.config import get_settings
 from universal_ai_search.connections.crypto import LocalEnvelopeEncryption
 from universal_ai_search.connections.drive import HttpDriveClient
+from universal_ai_search.connections.github import HttpGitHubAppGateway
+from universal_ai_search.connections.github_repository import HttpGitHubRepositoryClient
 from universal_ai_search.connections.gmail import HttpGmailClient
 from universal_ai_search.indexing.pipeline import IndexingPipeline
 from universal_ai_search.indexing.repository import IndexRepository
 from universal_ai_search.indexing.runtime import IndexingRuntime
 from universal_ai_search.sync.drive_repository import DriveSyncRepository
 from universal_ai_search.sync.drive_runtime import DriveSyncRuntime
+from universal_ai_search.sync.github_repository import GitHubSyncRepository
+from universal_ai_search.sync.github_runtime import (
+    GitHubSnapshotReader,
+    GitHubSyncRuntime,
+)
 from universal_ai_search.sync.repository import GoogleSyncRepository
 from universal_ai_search.sync.runtime import GmailSyncRuntime
 
@@ -81,18 +88,38 @@ def main(argv: Sequence[str] | None = None) -> int:
         ),
         enabled=settings.google_oauth_enabled,
     )
+    github_runtime = None
+    if settings.github_app_enabled:
+        github_runtime = GitHubSyncRuntime(
+            repository=GitHubSyncRepository(settings.database_url),
+            reader=GitHubSnapshotReader(
+                HttpGitHubRepositoryClient(
+                    gateway=HttpGitHubAppGateway(
+                        app_id=settings.github_app_id,
+                        private_key_pem=(
+                            settings.github_private_key_pem.get_secret_value().encode()
+                        ),
+                    )
+                )
+            ),
+        )
     worker_id = f"{socket.gethostname()}:{__version__}"
     if arguments.once:
-        if not sync_runtime.run_once(worker_id) and not drive_sync_runtime.run_once(
-            worker_id
+        if not (
+            sync_runtime.run_once(worker_id)
+            or drive_sync_runtime.run_once(worker_id)
+            or (github_runtime is not None and github_runtime.run_once(worker_id))
         ):
             runtime.run_once(worker_id)
         return 0
     while True:
         synced = sync_runtime.run_once(worker_id)
         drive_synced = drive_sync_runtime.run_once(worker_id)
+        github_synced = github_runtime is not None and github_runtime.run_once(
+            worker_id
+        )
         indexed = runtime.run_once(worker_id)
-        consumed = synced or drive_synced or indexed
+        consumed = synced or drive_synced or github_synced or indexed
         if not consumed:
             time.sleep(arguments.poll_interval)
 
