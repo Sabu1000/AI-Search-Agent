@@ -8,7 +8,7 @@ from pathlib import Path
 from alembic import command
 from alembic.config import Config
 
-EXPECTED_SCHEMA_REVISION = "0021_account_export"
+EXPECTED_SCHEMA_REVISION = "0022_device_upload_completion"
 
 
 def build_alembic_config() -> Config:

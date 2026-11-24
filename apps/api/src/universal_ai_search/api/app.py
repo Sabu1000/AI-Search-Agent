@@ -69,6 +69,9 @@ from universal_ai_search.devices.registration_store import (
     SQLAlchemyDeviceRegistrationStore,
 )
 from universal_ai_search.devices.revocation import DeviceRevocationStore
+from universal_ai_search.devices.upload_signer import VerifiedS3UploadSigner
+from universal_ai_search.devices.upload_store import SQLAlchemyDeviceUploadStore
+from universal_ai_search.devices.uploads import DeviceUploadAuthorization
 from universal_ai_search.search.history import SearchHistoryStore
 from universal_ai_search.search.repository import SearchRepository
 from universal_ai_search.search.service import SearchService
@@ -94,7 +97,11 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
         await engine.dispose()
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None,
+    *,
+    device_upload_signer: VerifiedS3UploadSigner | None = None,
+) -> FastAPI:
     runtime_settings = settings or get_settings()
     app = FastAPI(
         title="Universal AI Search API",
@@ -216,6 +223,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.device_registration_service = None
     app.state.device_heartbeat_service = None
     app.state.device_manifest_service = None
+    app.state.device_upload_signer = None
+    app.state.device_upload_authorization = None
     if runtime_settings.desktop_registration_enabled:
         registration_key = runtime_settings.auth_hash_key.get_secret_value().encode()
         app.state.device_registration_service = DeviceRegistrationService(
@@ -225,6 +234,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.device_heartbeat_service = DeviceHeartbeatService(
             SQLAlchemyDeviceHeartbeatStore(engine), hash_key=registration_key
         )
+        if device_upload_signer is not None:
+            app.state.device_upload_signer = device_upload_signer
+            app.state.device_upload_authorization = DeviceUploadAuthorization(
+                SQLAlchemyDeviceUploadStore(engine), hash_key=registration_key
+            )
         app.state.device_manifest_service = DeviceManifestService(
             SQLAlchemyDeviceManifestStore(engine), hash_key=registration_key
         )

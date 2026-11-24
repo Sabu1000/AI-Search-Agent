@@ -82,6 +82,7 @@ omit = [
   "*/universal_ai_search/devices/manifest_store.py",
   "*/universal_ai_search/devices/revocation.py",
   "*/universal_ai_search/devices/upload_store.py",
+  "*/universal_ai_search/devices/upload_completion_store.py",
   "*/universal_ai_search/devices/query.py",
   "*/universal_ai_search/search/history.py",
   "*/universal_ai_search/search/source_detail.py",
