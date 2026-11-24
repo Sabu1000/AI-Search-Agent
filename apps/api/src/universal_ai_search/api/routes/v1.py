@@ -36,6 +36,7 @@ from universal_ai_search.api.routes.device_registration import router as device_
 from universal_ai_search.api.routes.device_revocation import (
     router as device_revocation_router,
 )
+from universal_ai_search.api.routes.device_uploads import router as device_upload_router
 from universal_ai_search.api.routes.github_connections import router as github_router
 from universal_ai_search.api.routes.github_webhooks import (
     router as github_webhook_router,
@@ -88,6 +89,7 @@ router.include_router(device_query_router)
 router.include_router(search_history_router)
 router.include_router(source_detail_router)
 router.include_router(device_manifest_router)
+router.include_router(device_upload_router)
 router.include_router(connection_mutation_router)
 router.include_router(device_revocation_router)
 router.include_router(verification_resend_router)
