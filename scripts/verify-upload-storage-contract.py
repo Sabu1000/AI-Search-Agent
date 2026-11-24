@@ -3,16 +3,17 @@
 import base64
 import hashlib
 import os
+import ssl
 from concurrent.futures import ThreadPoolExecutor
 from urllib.error import HTTPError, URLError
-from urllib.request import ProxyHandler, Request, build_opener
+from urllib.request import HTTPSHandler, ProxyHandler, Request, build_opener
 
 import boto3
 from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 
 BUCKET = os.environ["UAS_OBJECT_STORAGE_BUCKET"]
-KEY = "staging/generated-fixture.txt"
+KEY = "device-inbox/generated-fixture.txt"
 DATA = b"synthetic upload fixture"
 CHECKSUM = base64.b64encode(hashlib.sha256(DATA).digest()).decode("ascii")
 HEADERS = {
@@ -26,7 +27,15 @@ HEADERS = {
 def put(url: str, data: bytes, headers: dict[str, str]) -> int:
     request = Request(url, method="PUT", data=data, headers=headers)
     try:
-        with build_opener(ProxyHandler({})).open(request, timeout=5) as response:
+        opener = build_opener(
+            ProxyHandler({}),
+            HTTPSHandler(
+                context=ssl.create_default_context(
+                    cafile=os.environ["UAS_VERIFY_S3_CA"]
+                )
+            ),
+        )
+        with opener.open(request, timeout=5) as response:
             return response.status
     except HTTPError as error:
         return error.code
@@ -41,6 +50,7 @@ def make_client(key_variable: str, secret_variable: str):
         aws_access_key_id=os.environ[key_variable],
         aws_secret_access_key=os.environ[secret_variable],
         region_name="us-east-1",
+        verify=os.environ["UAS_VERIFY_S3_CA"],
         config=Config(
             signature_version="s3v4",
             s3={"addressing_style": "path"},
