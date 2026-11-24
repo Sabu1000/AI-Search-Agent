@@ -1,3 +1,5 @@
+import hashlib
+import hmac
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import cast
@@ -19,6 +21,7 @@ from universal_ai_search.auth.backends import (
 )
 from universal_ai_search.auth.email import SMTPVerificationSender
 from universal_ai_search.auth.local_account_deletion import LocalAccountDeletionStore
+from universal_ai_search.auth.local_account_export import LocalAccountExportStore
 from universal_ai_search.auth.reauth import ReauthenticationService, RedisReauthLimiter
 from universal_ai_search.auth.reauth_store import ReauthenticationStore
 from universal_ai_search.auth.recovery import PasswordRecoveryService
@@ -68,6 +71,7 @@ from universal_ai_search.devices.revocation import DeviceRevocationStore
 from universal_ai_search.search.history import SearchHistoryStore
 from universal_ai_search.search.repository import SearchRepository
 from universal_ai_search.search.service import SearchService
+from universal_ai_search.search.source_deletion import SourceDeletionStore
 from universal_ai_search.search.source_detail import SourceDetailRepository
 from universal_ai_search.search.source_reindex import SourceReindexStore
 
@@ -137,6 +141,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         limiter=RedisReauthLimiter(cast(RedisScriptClient, redis)),
         hash_key=runtime_settings.auth_hash_key.get_secret_value().encode(),
     )
+    app.state.local_account_export_store = None
+    if runtime_settings.environment in {"local", "test"}:
+        app.state.local_account_export_store = LocalAccountExportStore(
+            engine,
+            reauth=app.state.reauth_service,
+            export_secret=hmac.digest(
+                runtime_settings.auth_hash_key.get_secret_value().encode(),
+                b"universal-ai-search/local-account-export/v1",
+                hashlib.sha256,
+            ),
+        )
     app.state.local_account_deletion_store = None
     if runtime_settings.local_account_deletion_enabled:
         app.state.local_account_deletion_store = LocalAccountDeletionStore(
@@ -174,6 +189,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.source_reindex_store = SourceReindexStore(
         engine,
         idempotency_secret=runtime_settings.idempotency_hash_key.get_secret_value().encode(),
+    )
+    app.state.source_deletion_store = SourceDeletionStore(
+        engine,
+        idempotency_secret=runtime_settings.idempotency_hash_key.get_secret_value().encode(),
+        audit_secret=runtime_settings.auth_hash_key.get_secret_value().encode(),
     )
     app.state.source_cursor_signer = CursorSigner(
         runtime_settings.cursor_signing_key.get_secret_value().encode()

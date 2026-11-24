@@ -35,7 +35,7 @@ shells are never counted as finished user features.
 | `02_SYSTEM_ARCHITECTURE.md` | Complete | Partial | Local topology, schema ordering, fail-closed HTTP boundaries, workspace authentication/authorization, durable Gmail/Drive/selected-GitHub indexing, and hybrid search exist. Desktop sync, model streaming, provider management UI, and remaining product services are open. |
 | `03_SEARCH_ENGINE_DESIGN.md` | Complete | Local-index backend implemented; product phase partial | PostgreSQL exact/FTS/pgvector/trigram retrieval, typed filters, RRF, deterministic ranking, bounded extractive claims/citations, history, and safe empty answers pass unit and local PostgreSQL tests. Signed-in web results support workspace and provider filters. Production semantic/model adapters, full filter and answer UI, evaluation, and cache remain. |
 | `04_DATABASE_SCHEMA.md` | Complete | Database runtime implemented; phase partial | Alembic creates `33/33` specified tables. The runtime adds GitHub authorization and sync migrations to the prior index/Gmail/Drive claim functions and forced RLS. Compose migrates before API startup; readiness checks revision `0009_github_sync_runtime`. Seed data, backup automation, and Phase 3 review remain. |
-| `05_API_SPECIFICATION.md` | Complete | API platform and selected product routes implemented | FastAPI provides OpenAPI 3.1, strict serialization, RFC 9457 problems, signed cursors, idempotency primitives, and workspace authentication. `44/49` catalogued product operations are wired. The API coverage script reports method/path availability separately from unsupported subcases and end-to-end verification. Rate limiting, SSE, and remaining operations are open. |
+| `05_API_SPECIFICATION.md` | Complete | API platform and selected product routes implemented | FastAPI provides OpenAPI 3.1, strict serialization, RFC 9457 problems, signed cursors, idempotency primitives, and workspace authentication. `46/49` catalogued product operations are wired. The API coverage script reports method/path availability separately from unsupported subcases and end-to-end verification. Rate limiting, SSE, and remaining operations are open. |
 | `06_CONNECTOR_FRAMEWORK.md` | Complete | Gmail and selected-root Drive backend phases complete; provider ecosystem partial | The GitHub backend now verifies selected-repository grants, ingests bounded repository and discussion snapshots, reconciles absence after success, and closes visibility on failed verification. Desktop has a bounded scanner core. Live provider checks, native desktop sync, Drive change polling, and shared operational controls remain. |
 | `07_INDEXING_PIPELINE.md` | Complete | Normalized text/Markdown and bounded provider extraction paths implemented | Deterministic chunking/deduplication, local embeddings, durable leases, atomic promotion, unchanged skips and deletion purging pass unit and local PostgreSQL tests. Drive PDF/DOCX/XLSX/PPTX and bounded GitHub repository/discussion data feed the index. Desktop indexing handoff and production embedding providers remain open. |
 | `08_SECURITY_AND_PRIVACY.md` | Complete | Partial controls | The threat model, data classification, tenant/cryptographic boundaries, browser/input/model defenses, audit/redaction policy, deletion/backup rules, and security release gates are implementation-ready. Existing RLS, strict API boundaries, secret validation, and containerized tests implement only part of the required controls. |
@@ -447,6 +447,16 @@ real, guarded worker operation while the prior searchable version stays
 active. Local/test-only account deletion and receipt lookup are opt-in for
 disposable, sole-owner data with no external or shared resources; production
 cascade, backup restore reconciliation, and lost-receipt recovery remain open.
+
+Owner-authorized source deletion scrubs local index data and invalidates saved
+answers that cited it. Durable deletion requests stop provider workers from
+recreating the removed source. Object-backed sources are rejected before any
+mutation until their storage purge is verified. Local/test account export
+supports a sole-owner free workspace and only user-authored database data (no
+provider data, generated answers, devices or credentials). Its private receipt
+offers one same-session JSON download within five minutes. The API never
+stores the archive or an external download URL, and refuses delivery if the
+authorized snapshot changed.
 
 Run `python scripts/api-coverage.py` with the backend environment to verify
 wired versus unwired operations from actual OpenAPI and the documented

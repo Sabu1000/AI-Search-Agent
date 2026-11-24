@@ -41,6 +41,9 @@ from universal_ai_search.api.routes.job_operations import router as job_operatio
 from universal_ai_search.api.routes.local_account_deletion import (
     router as local_account_delete_router,
 )
+from universal_ai_search.api.routes.local_account_export import (
+    router as local_account_export_router,
+)
 from universal_ai_search.api.routes.password_recovery import (
     router as password_recovery_router,
 )
@@ -48,6 +51,9 @@ from universal_ai_search.api.routes.reauthentication import router as reauth_rou
 from universal_ai_search.api.routes.search import router as search_router
 from universal_ai_search.api.routes.search_history import (
     router as search_history_router,
+)
+from universal_ai_search.api.routes.source_deletion import (
+    router as source_deletion_router,
 )
 from universal_ai_search.api.routes.source_detail import router as source_detail_router
 from universal_ai_search.api.routes.source_reindex import (
@@ -84,3 +90,5 @@ router.include_router(verification_resend_router)
 router.include_router(connection_disconnect_router)
 router.include_router(local_account_delete_router)
 router.include_router(source_reindex_router)
+router.include_router(source_deletion_router)
+router.include_router(local_account_export_router)

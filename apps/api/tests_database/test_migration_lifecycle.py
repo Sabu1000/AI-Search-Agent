@@ -44,6 +44,7 @@ EXPECTED_TABLES = {
     "workspace_members",
     "workspace_usage",
     "local_account_deletion_receipts",
+    "local_account_exports",
     "workspaces",
 }
 
@@ -59,7 +60,7 @@ def test_empty_database_upgrade_creates_exact_catalog(
     }
     assert tables == EXPECTED_TABLES
     assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-        "0020_account_deletion",
+        "0021_account_export",
     )
 
 

@@ -11,7 +11,11 @@ import psycopg
 from psycopg.rows import dict_row
 from uas_connector_sdk import NormalizedDocument
 
-from universal_ai_search.indexing.repository import IndexRepository, _sync_dsn
+from universal_ai_search.indexing.repository import (
+    EnqueueStatus,
+    IndexRepository,
+    _sync_dsn,
+)
 
 from .repository import ClaimedSyncJob, GoogleSyncRepository
 
@@ -142,6 +146,8 @@ class GitHubSyncRepository:
                 enqueued = IndexRepository.enqueue_in_transaction(
                     connection, claim.workspace_id, claim.connection_id, doc
                 )
+                if enqueued.status is EnqueueStatus.SUPPRESSED:
+                    continue
                 connection.execute(
                     """INSERT INTO app.source_collection_memberships
                        (workspace_id, connection_id, source_id, collection_id,

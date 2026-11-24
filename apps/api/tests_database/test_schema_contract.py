@@ -180,6 +180,7 @@ def test_every_tenant_table_has_direct_workspace_and_forced_rls(
     assert protected["device_manifest_pages"] == (True, True)
     assert protected["device_upload_reservations"] == (True, True)
     assert protected["local_account_deletion_receipts"] == (True, True)
+    assert protected["local_account_exports"] == (True, True)
 
     api_policy_tables = {
         row[0]

@@ -72,6 +72,8 @@ omit = [
   "*/universal_ai_search/auth/reauth_store.py",
   "*/universal_ai_search/auth/local_account_deletion.py",
   "*/universal_ai_search/search/source_reindex.py",
+  "*/universal_ai_search/search/source_deletion.py",
+  "*/universal_ai_search/auth/local_account_export.py",
   "*/universal_ai_search/auth/recovery_store.py",
   "*/universal_ai_search/connections/store.py",
   "*/universal_ai_search/conversations/repository.py",

@@ -89,6 +89,10 @@ def test_completed_receipt_is_content_free_and_has_a_private_status_endpoint(
         AsyncMock(return_value=None),
     )
     monkeypatch.setattr(
+        "universal_ai_search.api.routes.conversation_deletion.read_source_deletion_operation",
+        AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr(
         "universal_ai_search.api.routes.conversation_deletion.get_job_operation",
         AsyncMock(side_effect=_not_found()),
     )
@@ -130,3 +134,51 @@ def test_replay_conflicts_and_unavailable_conversations_are_not_disclosed() -> N
     assert reused.json()["code"] == "IDEMPOTENCY_KEY_REUSED"
     assert missing.status_code == 404
     assert missing.json()["code"] == "CONVERSATION_NOT_FOUND"
+
+
+def test_operation_dispatch_handles_private_source_and_export_receipts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from universal_ai_search.auth.local_account_export import ExportOperation
+
+    class OwnerWorkspace(Workspace):
+        async def authorize(self, *, principal, workspace_id):
+            workspace = await super().authorize(
+                principal=principal, workspace_id=workspace_id
+            )
+            return (
+                workspace.model_copy(update={"role": "owner"})
+                if workspace is not None
+                else None
+            )
+
+    client, store, _ = client_factory()
+    app = client.app
+    app.state.workspace_authorization_backend = OwnerWorkspace()
+    store.read.side_effect = ConversationMissing
+    monkeypatch.setattr(
+        "universal_ai_search.api.routes.conversation_deletion.read_source_reindex_operation",
+        AsyncMock(return_value=None),
+    )
+    source_read = AsyncMock(return_value=RECEIPT)
+    monkeypatch.setattr(app.state.source_deletion_store, "read", source_read)
+    export_id = uuid4()
+    export_read = AsyncMock(
+        return_value=ExportOperation(
+            export_id, WHEN, WHEN, WHEN + timedelta(minutes=5), True
+        )
+    )
+    monkeypatch.setattr(app.state.local_account_export_store, "read", export_read)
+    with client:
+        source = client.get(f"/v1/operations/{RECEIPT.id}", headers=HEADERS)
+        export_read.assert_not_awaited()
+        source_read.side_effect = ConversationMissing
+        export = client.get(f"/v1/operations/{export_id}", headers=HEADERS)
+    assert source.status_code == export.status_code == 200
+    assert source.json()["operation"]["type"] == "source_delete"
+    assert export.json()["operation"]["type"] == "account_export"
+    assert export.json()["operation"]["links"]["download"] == (
+        f"/v1/account/exports/{export_id}:download"
+    )
+    assert export.headers["cache-control"] == "private, no-store"
+    assert export_read.await_args.kwargs["operation_id"] == export_id

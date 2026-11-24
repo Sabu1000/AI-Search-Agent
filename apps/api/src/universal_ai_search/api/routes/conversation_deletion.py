@@ -7,11 +7,19 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Request, Response
 
-from universal_ai_search.api.auth import PrincipalDependency, WorkspaceDependency
+from universal_ai_search.api.auth import (
+    AuthenticationMode,
+    PrincipalDependency,
+    WorkspaceDependency,
+)
 from universal_ai_search.api.context import request_id_for
 from universal_ai_search.api.idempotency import validate_idempotency_key
 from universal_ai_search.api.models import CanonicalUUID, ResponseModel, UtcDateTime
 from universal_ai_search.api.problems import ProblemError
+from universal_ai_search.auth.local_account_export import (
+    ExportMissing,
+    LocalAccountExportStore,
+)
 from universal_ai_search.connections.disconnect import (
     ConnectionDisconnectStore,
     DisconnectMissing,
@@ -33,6 +41,7 @@ from universal_ai_search.devices.revocation import (
     DeviceRevocationStore,
     DeviceRevocationUnavailable,
 )
+from universal_ai_search.search.source_deletion import SourceDeletionStore
 from universal_ai_search.search.source_reindex import SourceReindexStore
 
 from .connection_disconnect import (
@@ -44,6 +53,8 @@ from .connections import _require_csrf
 from .conversations import _scope, _unavailable
 from .device_revocation import DeviceDeletionResponse, device_operation
 from .job_operations import JobOperationResponse, get_job_operation
+from .local_account_export import AccountExportResponse, export_operation, export_scope
+from .source_deletion import SourceDeletionResponse, read_source_deletion_operation
 from .source_reindex import SourceOperationResponse, read_source_reindex_operation
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
@@ -156,7 +167,9 @@ async def delete_conversation(
     | JobOperationResponse
     | DeviceDeletionResponse
     | DisconnectResponse
-    | SourceOperationResponse,
+    | SourceOperationResponse
+    | SourceDeletionResponse
+    | AccountExportResponse,
 )
 async def read_conversation_deletion_operation(
     operation_id: UUID,
@@ -171,6 +184,8 @@ async def read_conversation_deletion_operation(
     | DeviceDeletionResponse
     | DisconnectResponse
     | SourceOperationResponse
+    | SourceDeletionResponse
+    | AccountExportResponse
 ):
     scope = _scope(principal, workspace)
     try:
@@ -198,13 +213,14 @@ async def read_conversation_deletion_operation(
             raise _unavailable() from None
         else:
             return device_operation(device, response)
-        if workspace.role in {"owner", "admin"}:
+        disconnect_scope = manager_scope(principal, workspace)
+        if disconnect_scope is not None:
             disconnect_store = cast(
                 ConnectionDisconnectStore, request.app.state.connection_disconnect_store
             )
             try:
                 disconnected = await disconnect_store.read(
-                    scope=manager_scope(principal, workspace),
+                    scope=disconnect_scope,
                     receipt_id=operation_id,
                 )
             except DisconnectMissing:
@@ -222,6 +238,32 @@ async def read_conversation_deletion_operation(
         )
         if reindex is not None:
             return reindex
+        source_deletion_store = getattr(
+            request.app.state, "source_deletion_store", None
+        )
+        if isinstance(source_deletion_store, SourceDeletionStore):
+            deleted = await read_source_deletion_operation(
+                operation_id, response, principal, workspace, source_deletion_store
+            )
+            if deleted is not None:
+                return deleted
+        export_store = getattr(request.app.state, "local_account_export_store", None)
+        if (
+            isinstance(export_store, LocalAccountExportStore)
+            and workspace.role == "owner"
+            and principal.mode
+            in {AuthenticationMode.BROWSER, AuthenticationMode.BEARER}
+            and principal.session_id is not None
+            and principal.subject_id == workspace.user_id
+        ):
+            try:
+                export = await export_store.read(
+                    scope=export_scope(principal, workspace), operation_id=operation_id
+                )
+            except ExportMissing:
+                pass
+            else:
+                return export_operation(export, response)
         return await get_job_operation(
             request, response, operation_id, workspace.workspace_id, workspace.user_id
         )

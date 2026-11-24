@@ -76,6 +76,8 @@ def test_openapi_is_31_and_only_completed_product_routes_are_open() -> None:
         "/v1/auth/me",
         "/v1/account",
         "/v1/account/deletion-status",
+        "/v1/account/export",
+        "/v1/account/exports/{operation_id}:download",
         "/v1/auth/reauthenticate",
         "/v1/auth/password/request-reset",
         "/v1/auth/password/reset",

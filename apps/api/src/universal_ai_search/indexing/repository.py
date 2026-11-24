@@ -29,13 +29,14 @@ from .reindex import require_current_reindex
 class EnqueueStatus(StrEnum):
     QUEUED = "queued"
     UNCHANGED = "unchanged"
+    SUPPRESSED = "suppressed"
 
 
 @dataclass(frozen=True)
 class EnqueueResult:
     status: EnqueueStatus
     source_id: UUID
-    document_version_id: UUID
+    document_version_id: UUID | None
     job_id: UUID | None
 
 
@@ -140,14 +141,28 @@ class IndexRepository:
             profile_id=profile_id,
         )
         base_version_id = document_version_id(source_id, key)
-        deleted = connection.execute(
-            "SELECT lock_version FROM app.sources WHERE id = %s AND state = 'deleted'",
-            (source_id,),
+        prior = connection.execute(
+            """SELECT state, lock_version FROM app.sources
+               WHERE workspace_id = %s AND id = %s FOR UPDATE""",
+            (workspace_id, source_id),
         ).fetchone()
+        if (
+            prior is not None
+            and prior["state"] == "deleted"
+            and connection.execute(
+                """SELECT 1 FROM app.deletion_requests
+               WHERE workspace_id = %s AND target_type = 'source'
+                 AND target_id = %s AND status = 'completed' LIMIT 1""",
+                (workspace_id, source_id),
+            ).fetchone()
+        ):
+            # An owner removed this application copy. This is not a provider
+            # tombstone: later snapshots cannot bring it back.
+            return EnqueueResult(EnqueueStatus.SUPPRESSED, source_id, None, None)
         version_id = (
-            base_version_id
-            if deleted is None
-            else uuid5(base_version_id, f"restored:{deleted['lock_version']}")
+            uuid5(base_version_id, f"restored:{prior['lock_version']}")
+            if prior is not None and prior["state"] == "deleted"
+            else base_version_id
         )
 
         timestamp = document.modified_at or document.created_at
@@ -372,7 +387,24 @@ class IndexRepository:
                 (sync_marker, workspace_id, connection_id, list(source_ids)),
             ).fetchall()
             if len(updated) != len(source_ids):
-                raise RuntimeError("provider sync page could not be marked complete")
+                ignored = connection.execute(
+                    """SELECT source.id FROM app.sources AS source
+                       WHERE source.workspace_id = %s AND source.connection_id = %s
+                         AND source.id = ANY(%s) AND source.state = 'deleted'
+                         AND EXISTS (
+                           SELECT 1 FROM app.deletion_requests AS receipt
+                           WHERE receipt.workspace_id = source.workspace_id
+                             AND receipt.target_type = 'source'
+                             AND receipt.target_id = source.id
+                             AND receipt.status = 'completed'
+                         )""",
+                    (workspace_id, connection_id, list(source_ids)),
+                ).fetchall()
+                accounted_for = {row["id"] for row in (*updated, *ignored)}
+                if accounted_for != set(source_ids):
+                    raise RuntimeError(
+                        "provider sync page could not be marked complete"
+                    )
 
     def tombstone_gmail_message(
         self, workspace_id: UUID, connection_id: UUID, message_external_id: str
