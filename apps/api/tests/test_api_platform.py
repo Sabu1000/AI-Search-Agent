@@ -69,10 +69,13 @@ def test_openapi_is_31_and_only_completed_product_routes_are_open() -> None:
         "/health/ready",
         "/v1/auth/register",
         "/v1/auth/email/verify",
+        "/v1/auth/email/resend",
         "/v1/auth/login",
         "/v1/auth/refresh",
         "/v1/auth/logout",
         "/v1/auth/me",
+        "/v1/account",
+        "/v1/account/deletion-status",
         "/v1/auth/reauthenticate",
         "/v1/auth/password/request-reset",
         "/v1/auth/password/reset",
@@ -101,6 +104,7 @@ def test_openapi_is_31_and_only_completed_product_routes_are_open() -> None:
         "/v1/search/suggestions",
         "/v1/sources",
         "/v1/sources/{source_id}",
+        "/v1/sources/{source_id}/reindex",
         "/v1/usage",
     }
 

@@ -141,16 +141,22 @@ class ReauthenticationService:
         purpose: ReauthPurpose,
         token: str,
     ) -> None:
-        if purpose not in _ALLOWED or not _PROOF.fullmatch(token):
+        if purpose not in _ALLOWED:
             raise ReauthenticationFailed
         valid = await self._store.consume(
             connection,
             scope=scope,
             purpose=purpose,
-            token_hash=self._digest(b"proof", token.encode()),
+            token_hash=self.proof_hash(token),
         )
         if not valid:
             raise ReauthenticationFailed
+
+    def proof_hash(self, token: str) -> bytes:
+        """Validate syntax; protected SQL must still verify and consume the proof."""
+        if not _PROOF.fullmatch(token):
+            raise ReauthenticationFailed
+        return self._digest(b"proof", token.encode())
 
     def _digest(self, domain: bytes, value: bytes) -> bytes:
         return hmac.digest(

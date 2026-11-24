@@ -104,6 +104,7 @@ async def _job(
         JOIN app.workspaces w ON w.id=j.workspace_id AND w.status='active'
         WHERE j.id=:id AND j.workspace_id=:workspace AND c.owner_user_id=:actor
           AND j.job_type IN ('sync','index')
+          AND j.payload ->> 'source_reindex_actor' IS NULL
     """
     if lock:
         sql += " FOR UPDATE OF j, c"

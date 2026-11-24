@@ -35,7 +35,7 @@ shells are never counted as finished user features.
 | `02_SYSTEM_ARCHITECTURE.md` | Complete | Partial | Local topology, schema ordering, fail-closed HTTP boundaries, workspace authentication/authorization, durable Gmail/Drive/selected-GitHub indexing, and hybrid search exist. Desktop sync, model streaming, provider management UI, and remaining product services are open. |
 | `03_SEARCH_ENGINE_DESIGN.md` | Complete | Local-index backend implemented; product phase partial | PostgreSQL exact/FTS/pgvector/trigram retrieval, typed filters, RRF, deterministic ranking, bounded extractive claims/citations, history, and safe empty answers pass unit and local PostgreSQL tests. Signed-in web results support workspace and provider filters. Production semantic/model adapters, full filter and answer UI, evaluation, and cache remain. |
 | `04_DATABASE_SCHEMA.md` | Complete | Database runtime implemented; phase partial | Alembic creates `33/33` specified tables. The runtime adds GitHub authorization and sync migrations to the prior index/Gmail/Drive claim functions and forced RLS. Compose migrates before API startup; readiness checks revision `0009_github_sync_runtime`. Seed data, backup automation, and Phase 3 review remain. |
-| `05_API_SPECIFICATION.md` | Complete | API platform and selected product routes implemented | FastAPI provides OpenAPI 3.1, strict serialization, RFC 9457 problems, signed cursors, idempotency primitives, and workspace authentication. `38/49` catalogued product operations are wired. The API coverage script reports method/path availability separately from unsupported subcases and end-to-end verification. Rate limiting, SSE, and remaining operations are open. |
+| `05_API_SPECIFICATION.md` | Complete | API platform and selected product routes implemented | FastAPI provides OpenAPI 3.1, strict serialization, RFC 9457 problems, signed cursors, idempotency primitives, and workspace authentication. `44/49` catalogued product operations are wired. The API coverage script reports method/path availability separately from unsupported subcases and end-to-end verification. Rate limiting, SSE, and remaining operations are open. |
 | `06_CONNECTOR_FRAMEWORK.md` | Complete | Gmail and selected-root Drive backend phases complete; provider ecosystem partial | The GitHub backend now verifies selected-repository grants, ingests bounded repository and discussion snapshots, reconciles absence after success, and closes visibility on failed verification. Desktop has a bounded scanner core. Live provider checks, native desktop sync, Drive change polling, and shared operational controls remain. |
 | `07_INDEXING_PIPELINE.md` | Complete | Normalized text/Markdown and bounded provider extraction paths implemented | Deterministic chunking/deduplication, local embeddings, durable leases, atomic promotion, unchanged skips and deletion purging pass unit and local PostgreSQL tests. Drive PDF/DOCX/XLSX/PPTX and bounded GitHub repository/discussion data feed the index. Desktop indexing handoff and production embedding providers remain open. |
 | `08_SECURITY_AND_PRIVACY.md` | Complete | Partial controls | The threat model, data classification, tenant/cryptographic boundaries, browser/input/model defenses, audit/redaction policy, deletion/backup rules, and security release gates are implementation-ready. Existing RLS, strict API boundaries, secret validation, and containerized tests implement only part of the required controls. |
@@ -433,8 +433,20 @@ can narrow existing GitHub grants only. No provider scopes are widened.
 Opt-in device liveness checks authenticate exact request bytes and claim a
 replay nonce. Active local-file devices and folder grants can submit bounded
 metadata manifests with durable idempotency and immutable upload intents.
-No object URL is minted; upload, completion, and native client testing are
-still open.
+No object URL is minted; a tested upload reservation boundary checks exact
+metadata, replay, and quotas, but the signer and completion routes remain
+unwired until write-once storage can be verified.
+
+Verification resend issues only hashed replacement proofs for pending accounts
+and returns one generic response. Device revocation completes bounded
+database-only cleanup and invalidates signing atomically; external blobs and
+larger scopes are refused before changes. GitHub disconnect completes only for
+an unused local pending grant; it neither uninstalls a shared GitHub App nor
+claims to purge indexed or external data. Manual source reindex creates a
+real, guarded worker operation while the prior searchable version stays
+active. Local/test-only account deletion and receipt lookup are opt-in for
+disposable, sole-owner data with no external or shared resources; production
+cascade, backup restore reconciliation, and lost-receipt recovery remain open.
 
 Run `python scripts/api-coverage.py` with the backend environment to verify
 wired versus unwired operations from actual OpenAPI and the documented

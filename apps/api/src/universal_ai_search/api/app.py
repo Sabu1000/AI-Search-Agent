@@ -18,6 +18,7 @@ from universal_ai_search.auth.backends import (
     SessionAuthenticationBackend,
 )
 from universal_ai_search.auth.email import SMTPVerificationSender
+from universal_ai_search.auth.local_account_deletion import LocalAccountDeletionStore
 from universal_ai_search.auth.reauth import ReauthenticationService, RedisReauthLimiter
 from universal_ai_search.auth.reauth_store import ReauthenticationStore
 from universal_ai_search.auth.recovery import PasswordRecoveryService
@@ -33,8 +34,14 @@ from universal_ai_search.auth.recovery_store import SQLAlchemyRecoveryStore
 from universal_ai_search.auth.security import AccessTokenCodec, PasswordSecurity
 from universal_ai_search.auth.service import AuthenticationService
 from universal_ai_search.auth.store import SQLAlchemyAuthStore
+from universal_ai_search.auth.verification_resend import (
+    SMTPVerificationCodeDelivery,
+    SQLAlchemyVerificationResendStore,
+    VerificationResendService,
+)
 from universal_ai_search.config import Settings, get_settings
 from universal_ai_search.connections.crypto import LocalEnvelopeEncryption
+from universal_ai_search.connections.disconnect import ConnectionDisconnectStore
 from universal_ai_search.connections.github import HttpGitHubAppGateway
 from universal_ai_search.connections.github_event_store import (
     SQLAlchemyGitHubWebhookService,
@@ -57,10 +64,12 @@ from universal_ai_search.devices.registration import DeviceRegistrationService
 from universal_ai_search.devices.registration_store import (
     SQLAlchemyDeviceRegistrationStore,
 )
+from universal_ai_search.devices.revocation import DeviceRevocationStore
 from universal_ai_search.search.history import SearchHistoryStore
 from universal_ai_search.search.repository import SearchRepository
 from universal_ai_search.search.service import SearchService
 from universal_ai_search.search.source_detail import SourceDetailRepository
+from universal_ai_search.search.source_reindex import SourceReindexStore
 
 
 @asynccontextmanager
@@ -69,6 +78,9 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     recovery_mail = getattr(app.state, "recovery_mail", None)
     if isinstance(recovery_mail, BoundedRecoveryMailQueue):
         await recovery_mail.drain()
+    resend = getattr(app.state, "verification_resend_service", None)
+    if isinstance(resend, VerificationResendService):
+        await resend.drain()
     recovery_redis = getattr(app.state, "recovery_redis", None)
     if isinstance(recovery_redis, Redis):
         await recovery_redis.aclose()
@@ -108,12 +120,30 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     redis = Redis.from_url(runtime_settings.redis_url, socket_timeout=2)
     app.state.recovery_redis = redis
+    app.state.verification_resend_service = VerificationResendService(
+        store=SQLAlchemyVerificationResendStore(engine),
+        limiter=RedisRecoveryRequestLimiter(cast(RedisScriptClient, redis)),
+        delivery=SMTPVerificationCodeDelivery(
+            host=runtime_settings.smtp_host,
+            port=runtime_settings.smtp_port,
+            sender=runtime_settings.email_from,
+            require_starttls=runtime_settings.environment not in {"local", "test"},
+        ),
+        key=runtime_settings.auth_hash_key.get_secret_value().encode(),
+    )
     app.state.reauth_service = ReauthenticationService(
         store=ReauthenticationStore(engine),
         security=service.password_security,
         limiter=RedisReauthLimiter(cast(RedisScriptClient, redis)),
         hash_key=runtime_settings.auth_hash_key.get_secret_value().encode(),
     )
+    app.state.local_account_deletion_store = None
+    if runtime_settings.local_account_deletion_enabled:
+        app.state.local_account_deletion_store = LocalAccountDeletionStore(
+            engine,
+            reauth=app.state.reauth_service,
+            hash_key=runtime_settings.auth_hash_key.get_secret_value().encode(),
+        )
     app.state.password_recovery_service = None
     if runtime_settings.password_recovery_enabled:
         mail_queue = BoundedRecoveryMailQueue(
@@ -141,6 +171,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.search_service = SearchService(SearchRepository(engine))
     app.state.source_detail_repository = SourceDetailRepository(engine)
+    app.state.source_reindex_store = SourceReindexStore(
+        engine,
+        idempotency_secret=runtime_settings.idempotency_hash_key.get_secret_value().encode(),
+    )
     app.state.source_cursor_signer = CursorSigner(
         runtime_settings.cursor_signing_key.get_secret_value().encode()
     )
@@ -150,6 +184,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         audit_secret=runtime_settings.auth_hash_key.get_secret_value().encode(),
     )
     app.state.device_query_reader = SQLAlchemyDeviceQueryReader(engine)
+    app.state.device_revocation_store = DeviceRevocationStore(
+        engine,
+        idempotency_secret=runtime_settings.idempotency_hash_key.get_secret_value().encode(),
+        audit_secret=runtime_settings.auth_hash_key.get_secret_value().encode(),
+    )
     app.state.device_cursor_signer = CursorSigner(
         runtime_settings.cursor_signing_key.get_secret_value().encode()
     )
@@ -169,6 +208,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             SQLAlchemyDeviceManifestStore(engine), hash_key=registration_key
         )
     app.state.connection_query_reader = SQLAlchemyConnectionQueryReader(engine)
+    app.state.connection_disconnect_store = ConnectionDisconnectStore(
+        engine,
+        reauth_service=app.state.reauth_service,
+        idempotency_secret=runtime_settings.idempotency_hash_key.get_secret_value().encode(),
+        audit_secret=runtime_settings.auth_hash_key.get_secret_value().encode(),
+    )
     app.state.connection_mutation_store = SQLAlchemyConnectionMutationStore(
         engine,
         idempotency_secret=runtime_settings.idempotency_hash_key.get_secret_value().encode(),
@@ -243,7 +288,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_origins=[runtime_settings.web_origin],
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "DELETE"],
-        expose_headers=["ETag"],
+        expose_headers=["ETag", "Location"],
         allow_headers=[
             "Authorization",
             "Content-Type",

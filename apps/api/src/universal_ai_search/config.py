@@ -51,6 +51,7 @@ class Settings(BaseSettings):
     web_origin: str = "http://localhost:3000"
     password_recovery_enabled: bool = False
     desktop_registration_enabled: bool = False
+    local_account_deletion_enabled: bool = False
     smtp_host: str = "localhost"
     smtp_port: int = 1025
     email_from: str = "Universal AI Search <no-reply@localhost>"
@@ -91,6 +92,13 @@ class Settings(BaseSettings):
             or not self.google_client_secret.get_secret_value()
         ):
             raise ValueError("Google OAuth credentials are required when enabled")
+        if self.local_account_deletion_enabled and self.environment not in {
+            "local",
+            "test",
+        }:
+            raise ValueError(
+                "Local account deletion requires disposable local or test storage"
+            )
         return self
 
 

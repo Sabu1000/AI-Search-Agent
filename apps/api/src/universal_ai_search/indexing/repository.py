@@ -17,11 +17,13 @@ from .pipeline import (
     CHUNKER_VERSION,
     EMBEDDING_MODEL,
     PARSER_VERSION,
+    IndexingError,
     PendingDocument,
     PreparedDocument,
     document_version_id,
     version_key,
 )
+from .reindex import require_current_reindex
 
 
 class EnqueueStatus(StrEnum):
@@ -249,9 +251,15 @@ class IndexRepository:
             "SELECT version.id FROM app.sources AS source "
             "JOIN app.document_versions AS version "
             "ON version.id = source.current_document_version_id "
-            "WHERE source.id = %s AND version.version_key = %s "
-            "AND version.state = 'ready'",
-            (source_id, key),
+            "WHERE source.id = %s AND version.state = 'ready' "
+            "AND (version.version_key = %s OR EXISTS ("
+            "SELECT 1 FROM app.jobs AS rebuild "
+            "WHERE rebuild.workspace_id = version.workspace_id "
+            "AND rebuild.source_id = version.source_id AND rebuild.job_type = 'index' "
+            "AND rebuild.status = 'completed' "
+            "AND rebuild.payload ->> 'document_version_id' = version.id::text "
+            "AND rebuild.payload ->> 'canonical_version_key' = %s))",
+            (source_id, key, key.hex()),
         ).fetchone()
         if current is not None:
             return EnqueueResult(
@@ -534,10 +542,12 @@ class IndexRepository:
     def load_pending(self, claim: ClaimedJob) -> PendingDocument:
         with psycopg.connect(self._database_url, row_factory=dict_row) as connection:
             self._set_worker_context(connection, claim.workspace_id)
+            require_current_reindex(connection, claim)
             row = connection.execute(
                 """SELECT version.workspace_id, version.source_id,
                     version.id AS document_version_id, source.title,
-                    version.normalized_text AS content, source.mime_type,
+                    COALESCE(version.normalized_text, expected.normalized_text)
+                        AS content, source.mime_type,
                     version.content_hash, version.permissions_hash,
                     (job.payload ->> 'embedding_profile_id')::INTEGER
                         AS embedding_profile_id
@@ -546,12 +556,25 @@ class IndexRepository:
                   ON version.workspace_id = job.workspace_id
                  AND version.id = (job.payload ->> 'document_version_id')::UUID
                 JOIN app.sources AS source ON source.id = version.source_id
+                LEFT JOIN app.document_versions AS expected
+                  ON expected.workspace_id = source.workspace_id
+                 AND expected.source_id = source.id
+                 AND expected.id = source.current_document_version_id
+                 AND expected.id::text
+                     = job.payload ->> 'expected_current_document_version_id'
+                 AND expected.content_hash = source.content_hash
+                 AND expected.permissions_hash = source.permissions_hash
+                 AND expected.state = 'ready' AND expected.object_storage_key IS NULL
                 WHERE job.id = %s AND job.status = 'leased'
-                  AND job.lease_owner = %s AND version.state = 'pending'""",
-                (claim.job_id, claim.worker_id),
+                  AND job.lease_owner = %s AND job.attempt_count = %s
+                  AND job.lease_expires_at > clock_timestamp()
+                  AND version.state = 'pending'
+                  AND (job.payload ->> 'source_reindex_actor' IS NULL
+                       OR expected.id IS NOT NULL)""",
+                (claim.job_id, claim.worker_id, claim.attempt_number),
             ).fetchone()
             if row is None:
-                raise RuntimeError("claimed indexing input is unavailable")
+                raise IndexingError("INDEX_PROMOTION_CONFLICT")
             return PendingDocument(**row)
 
     def promote(self, claim: ClaimedJob, prepared: PreparedDocument) -> None:
@@ -570,15 +593,21 @@ class IndexRepository:
                 LEFT JOIN app.document_versions AS old
                   ON old.id = source.current_document_version_id
                 WHERE job.id = %s AND job.status = 'leased'
-                  AND job.lease_owner = %s
+                  AND job.lease_owner = %s AND job.attempt_count = %s
                   AND job.lease_expires_at > clock_timestamp()
                   AND version.state = 'pending'
                 FOR UPDATE OF job, version, source""",
-                (claim.document_version_id, claim.job_id, claim.worker_id),
+                (
+                    claim.document_version_id,
+                    claim.job_id,
+                    claim.worker_id,
+                    claim.attempt_number,
+                ),
             ).fetchone()
             if locked is None:
-                raise RuntimeError("index promotion lost its lease or became stale")
+                raise IndexingError("INDEX_PROMOTION_CONFLICT")
 
+            require_current_reindex(connection, claim, promoting=True)
             profile_id = self._profile_id(connection, claim.document_version_id)
             for chunk in prepared.chunks:
                 connection.execute(
@@ -727,8 +756,9 @@ class IndexRepository:
             self._set_worker_context(connection, claim.workspace_id)
             job = connection.execute(
                 "SELECT attempt_count, max_attempts FROM app.jobs WHERE id = %s "
-                "AND status = 'leased' AND lease_owner = %s FOR UPDATE",
-                (claim.job_id, claim.worker_id),
+                "AND status = 'leased' AND lease_owner = %s AND attempt_count = %s "
+                "AND lease_expires_at > clock_timestamp() FOR UPDATE",
+                (claim.job_id, claim.worker_id, claim.attempt_number),
             ).fetchone()
             if job is None:
                 return

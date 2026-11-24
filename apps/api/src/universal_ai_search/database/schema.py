@@ -8,7 +8,7 @@ from pathlib import Path
 from alembic import command
 from alembic.config import Config
 
-EXPECTED_SCHEMA_REVISION = "0017_device_manifests"
+EXPECTED_SCHEMA_REVISION = "0020_account_deletion"
 
 
 def build_alembic_config() -> Config:

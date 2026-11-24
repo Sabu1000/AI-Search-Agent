@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from psycopg.errors import LockNotAvailable
+
 from .pipeline import IndexingError, IndexingPipeline
 from .repository import IndexRepository
 
@@ -21,6 +23,8 @@ class IndexingRuntime:
             self._repository.promote(claim, prepared)
         except IndexingError as error:
             self._repository.fail(claim, error.code, retryable=False)
+        except LockNotAvailable:
+            self._repository.fail(claim, "INDEX_PROMOTION_CONFLICT", retryable=True)
         except Exception:
             self._repository.fail(claim, "INDEXING_INTERNAL_ERROR", retryable=True)
             raise

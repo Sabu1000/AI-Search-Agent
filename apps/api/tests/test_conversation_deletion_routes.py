@@ -13,12 +13,14 @@ from universal_ai_search.api.routes.conversation_deletion import (
     operations_router,
     router,
 )
+from universal_ai_search.connections.disconnect import DisconnectMissing
 from universal_ai_search.conversations.deletion import ConversationDeletion
 from universal_ai_search.conversations.repository import (
     ConversationBusy,
     ConversationKeyConflict,
     ConversationMissing,
 )
+from universal_ai_search.devices.revocation import DeviceRevocationRejected
 
 WHEN = datetime(2026, 11, 24, tzinfo=UTC)
 CONVERSATION_ID = uuid4()
@@ -36,6 +38,12 @@ def client_factory() -> tuple[TestClient, SimpleNamespace, Auth]:
     app.state.authentication_backend = auth
     app.state.workspace_authorization_backend = Workspace()
     app.state.conversation_deletion_store = store
+    app.state.connection_disconnect_store = SimpleNamespace(
+        read=AsyncMock(side_effect=DisconnectMissing)
+    )
+    app.state.device_revocation_store = SimpleNamespace(
+        read=AsyncMock(side_effect=DeviceRevocationRejected)
+    )
     app.include_router(router, prefix="/v1")
     app.include_router(operations_router, prefix="/v1")
     return TestClient(app), store, auth
@@ -76,6 +84,10 @@ def test_completed_receipt_is_content_free_and_has_a_private_status_endpoint(
 ) -> None:
     from universal_ai_search.api.routes.job_operations import _not_found
 
+    monkeypatch.setattr(
+        "universal_ai_search.api.routes.conversation_deletion.read_source_reindex_operation",
+        AsyncMock(return_value=None),
+    )
     monkeypatch.setattr(
         "universal_ai_search.api.routes.conversation_deletion.get_job_operation",
         AsyncMock(side_effect=_not_found()),

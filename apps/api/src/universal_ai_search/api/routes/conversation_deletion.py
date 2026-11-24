@@ -12,6 +12,10 @@ from universal_ai_search.api.context import request_id_for
 from universal_ai_search.api.idempotency import validate_idempotency_key
 from universal_ai_search.api.models import CanonicalUUID, ResponseModel, UtcDateTime
 from universal_ai_search.api.problems import ProblemError
+from universal_ai_search.connections.disconnect import (
+    ConnectionDisconnectStore,
+    DisconnectMissing,
+)
 from universal_ai_search.conversations.deletion import (
     DELETE_CONFIRMATION,
     ConversationDeletion,
@@ -23,10 +27,24 @@ from universal_ai_search.conversations.repository import (
     ConversationKeyConflict,
     ConversationMissing,
 )
+from universal_ai_search.devices.registration import RegistrationScope
+from universal_ai_search.devices.revocation import (
+    DeviceRevocationRejected,
+    DeviceRevocationStore,
+    DeviceRevocationUnavailable,
+)
+from universal_ai_search.search.source_reindex import SourceReindexStore
 
+from .connection_disconnect import (
+    DisconnectResponse,
+    completed_response,
+    manager_scope,
+)
 from .connections import _require_csrf
 from .conversations import _scope, _unavailable
+from .device_revocation import DeviceDeletionResponse, device_operation
 from .job_operations import JobOperationResponse, get_job_operation
+from .source_reindex import SourceOperationResponse, read_source_reindex_operation
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 operations_router = APIRouter(prefix="/operations", tags=["operations"])
@@ -133,7 +151,12 @@ async def delete_conversation(
 
 
 @operations_router.get(
-    "/{operation_id}", response_model=DeletionResponse | JobOperationResponse
+    "/{operation_id}",
+    response_model=DeletionResponse
+    | JobOperationResponse
+    | DeviceDeletionResponse
+    | DisconnectResponse
+    | SourceOperationResponse,
 )
 async def read_conversation_deletion_operation(
     operation_id: UUID,
@@ -142,7 +165,13 @@ async def read_conversation_deletion_operation(
     principal: PrincipalDependency,
     workspace: WorkspaceDependency,
     store: StoreDependency,
-) -> DeletionResponse | JobOperationResponse:
+) -> (
+    DeletionResponse
+    | JobOperationResponse
+    | DeviceDeletionResponse
+    | DisconnectResponse
+    | SourceOperationResponse
+):
     scope = _scope(principal, workspace)
     try:
         receipt = await store.read(scope=scope, receipt_id=operation_id)
@@ -151,6 +180,48 @@ async def read_conversation_deletion_operation(
             status=404, code="OPERATION_NOT_FOUND", title="Operation is unavailable"
         ) from None
     except ConversationMissing:
+        devices = cast(DeviceRevocationStore, request.app.state.device_revocation_store)
+        try:
+            device = await devices.read(
+                scope=RegistrationScope(
+                    scope.workspace_id,
+                    scope.user_id,
+                    scope.session_id,
+                    scope.user_version,
+                    scope.workspace_version,
+                ),
+                receipt_id=operation_id,
+            )
+        except DeviceRevocationRejected:
+            pass
+        except DeviceRevocationUnavailable:
+            raise _unavailable() from None
+        else:
+            return device_operation(device, response)
+        if workspace.role in {"owner", "admin"}:
+            disconnect_store = cast(
+                ConnectionDisconnectStore, request.app.state.connection_disconnect_store
+            )
+            try:
+                disconnected = await disconnect_store.read(
+                    scope=manager_scope(principal, workspace),
+                    receipt_id=operation_id,
+                )
+            except DisconnectMissing:
+                pass
+            else:
+                if disconnected is not None and disconnected.status == "completed":
+                    response.headers["Cache-Control"] = "private, no-store"
+                    return completed_response(disconnected)
+        reindex = await read_source_reindex_operation(
+            operation_id,
+            response,
+            principal,
+            workspace,
+            cast(SourceReindexStore, request.app.state.source_reindex_store),
+        )
+        if reindex is not None:
+            return reindex
         return await get_job_operation(
             request, response, operation_id, workspace.workspace_id, workspace.user_id
         )

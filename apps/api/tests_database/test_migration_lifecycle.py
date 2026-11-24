@@ -23,6 +23,7 @@ EXPECTED_TABLES = {
     "device_registration_challenges",
     "device_request_nonces",
     "device_manifest_pages",
+    "device_upload_reservations",
     "document_versions",
     "embedding_profiles",
     "job_attempts",
@@ -42,6 +43,7 @@ EXPECTED_TABLES = {
     "users",
     "workspace_members",
     "workspace_usage",
+    "local_account_deletion_receipts",
     "workspaces",
 }
 
@@ -57,7 +59,7 @@ def test_empty_database_upgrade_creates_exact_catalog(
     }
     assert tables == EXPECTED_TABLES
     assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-        "0017_device_manifests",
+        "0020_account_deletion",
     )
 
 
