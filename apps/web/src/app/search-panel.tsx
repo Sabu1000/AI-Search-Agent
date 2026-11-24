@@ -25,10 +25,25 @@ type SearchResult = {
   target?: unknown;
 };
 
+type SearchMode = "results" | "answer";
+
+type Citation = {
+  id: string;
+  claim_ids: string[];
+  source_id: string;
+  chunk_id: string;
+  excerpt: string;
+};
+type Claim = { id: string; text: string; citation_ids: string[] };
+
+type AnswerState =
+  | { kind: "insufficient" | "unavailable" }
+  | { kind: "grounded"; claims: Claim[]; citations: { data: Citation; source: SearchResult }[] };
+
 type SearchState =
   | { kind: "idle" }
   | { kind: "loading" }
-  | { kind: "success"; results: SearchResult[] }
+  | { kind: "success"; results: SearchResult[]; answer: AnswerState | null }
   | { kind: "error"; message: string };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -49,6 +64,82 @@ function isResult(value: unknown): value is SearchResult {
     typeof value.source_type === "string" &&
     typeof value.snippet === "string"
   );
+}
+
+function nonemptyStrings(values: unknown): values is string[] {
+  return Array.isArray(values) && values.length > 0 && values.every(isNonemptyString);
+}
+
+function isNonemptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function isCitation(value: unknown): value is Citation {
+  return (
+    isRecord(value) &&
+    isNonemptyString(value.id) &&
+    nonemptyStrings(value.claim_ids) &&
+    isNonemptyString(value.source_id) &&
+    isNonemptyString(value.chunk_id) &&
+    isNonemptyString(value.excerpt)
+  );
+}
+
+function isClaim(value: unknown): value is Claim {
+  return (
+    isRecord(value) &&
+    isNonemptyString(value.id) &&
+    isNonemptyString(value.text) &&
+    nonemptyStrings(value.citation_ids)
+  );
+}
+
+function readAnswer(response: Record<string, unknown>, results: SearchResult[]): AnswerState {
+  if (isRecord(response.degradation) && response.degradation.answer_generation === "unavailable") {
+    return { kind: "unavailable" };
+  }
+
+  const answer = response.answer;
+  if (isRecord(answer) && isRecord(answer.insufficient_evidence)) {
+    if (answer.insufficient_evidence.value === true) return { kind: "insufficient" };
+    if (
+      answer.insufficient_evidence.value === false &&
+      Array.isArray(answer.claims) &&
+      answer.claims.length > 0 &&
+      answer.claims.every(isClaim) &&
+      Array.isArray(answer.citations) &&
+      answer.citations.length > 0 &&
+      answer.citations.every(isCitation)
+    ) {
+      const claims = answer.claims;
+      const data = answer.citations;
+      const claimsById = new Map(claims.map((claim) => [claim.id, claim]));
+      const citationsById = new Map(data.map((citation) => [citation.id, citation]));
+      if (
+        claimsById.size === claims.length &&
+        citationsById.size === data.length &&
+        claims.every((claim) =>
+          claim.citation_ids.every((id) => citationsById.get(id)?.claim_ids.includes(claim.id)),
+        ) &&
+        data.every((citation) =>
+          citation.claim_ids.every((id) => claimsById.get(id)?.citation_ids.includes(citation.id)),
+        )
+      ) {
+        const citations: { data: Citation; source: SearchResult }[] = [];
+        for (const citation of data) {
+          const source = results.find(
+            (result) =>
+              result.source_id === citation.source_id && result.chunk_id === citation.chunk_id,
+          );
+          if (!source) return { kind: "unavailable" };
+          citations.push({ data: citation, source });
+        }
+        return { kind: "grounded", claims, citations };
+      }
+    }
+  }
+  // Never render ungrounded content, even if answer_markdown is present.
+  return { kind: "unavailable" };
 }
 
 function sourceUrl(result: SearchResult): string | undefined {
@@ -84,8 +175,63 @@ function searchFailure(status: number): string {
   return "Search is unavailable right now. Try again.";
 }
 
+function AnswerCard({ answer }: { answer: AnswerState }) {
+  const id = useId();
+  return (
+    <section className="answerCard" aria-labelledby={`${id}-title`}>
+      <h3 id={`${id}-title`}>Grounded answer</h3>
+      {answer.kind !== "grounded" ? (
+        <p role="status">
+          {answer.kind === "insufficient"
+            ? "There isn’t enough indexed evidence to answer this. Try a different query or source filter."
+            : "A cited answer is unavailable. You can still review any matching sources below."}
+        </p>
+      ) : (
+        <>
+          <p className="answerHint">Excerpts from the indexed sources supporting this answer.</p>
+          <ul className="answerClaims" aria-label="Answer excerpts">
+            {answer.claims.map((claim) => (
+              <li key={claim.id}>
+                <span>{claim.text}</span>{" "}
+                {[...new Set(claim.citation_ids)].map((citationId) => {
+                  const position =
+                    answer.citations.findIndex(({ data }) => data.id === citationId) + 1;
+                  return (
+                    <a key={citationId} href={`#${id}-citation-${position}`}>
+                      <span className="visuallyHidden">Citation </span>[{position}]
+                    </a>
+                  );
+                })}
+              </li>
+            ))}
+          </ul>
+          <h4>Citations</h4>
+          <ol className="answerCitations" aria-label="Citations">
+            {answer.citations.map(({ data, source }, index) => {
+              const url = sourceUrl(source);
+              return (
+                <li id={`${id}-citation-${index + 1}`} key={data.id} tabIndex={-1}>
+                  <strong>{source.title}</strong>
+                  <blockquote>{data.excerpt}</blockquote>
+                  {url && (
+                    <a href={url} target="_blank" rel="noopener noreferrer">
+                      Open cited source
+                      <span className="visuallyHidden">: {source.title} (new tab)</span>
+                    </a>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+        </>
+      )}
+    </section>
+  );
+}
+
 function WorkspaceSearch({ apiUrl, workspaceId }: { apiUrl: string; workspaceId: string }) {
   const [query, setQuery] = useState("");
+  const [mode, setMode] = useState<SearchMode>("results");
   const [provider, setProvider] = useState<Provider | "">("");
   const [state, setState] = useState<SearchState>({ kind: "idle" });
   const controllerRef = useRef<AbortController | null>(null);
@@ -107,13 +253,19 @@ function WorkspaceSearch({ apiUrl, workspaceId }: { apiUrl: string; workspaceId:
     setState({ kind: "loading" });
 
     try {
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        "X-Workspace-ID": workspaceId,
+      };
+      if (mode === "answer") headers["Idempotency-Key"] = crypto.randomUUID();
+
       const response = await fetch(`${apiUrl}/v1/search`, {
         method: "POST",
         credentials: "include",
-        headers: { "Content-Type": "application/json", "X-Workspace-ID": workspaceId },
+        headers,
         body: JSON.stringify({
           query: trimmed,
-          mode: "results",
+          mode,
           providers: provider ? [provider] : [],
         }),
         signal: controller.signal,
@@ -131,7 +283,12 @@ function WorkspaceSearch({ apiUrl, workspaceId }: { apiUrl: string; workspaceId:
         throw new Error("Invalid search response");
       }
       if (!controller.signal.aborted) {
-        setState({ kind: "success", results: body.results });
+        const results = body.results;
+        setState({
+          kind: "success",
+          results,
+          answer: mode === "answer" ? readAnswer(body, results) : null,
+        });
       }
     } catch {
       if (!controller.signal.aborted) {
@@ -170,8 +327,22 @@ function WorkspaceSearch({ apiUrl, workspaceId }: { apiUrl: string; workspaceId:
             ))}
           </select>
         </label>
+        <label>
+          Mode
+          <select
+            value={mode}
+            onChange={(event) => {
+              controllerRef.current?.abort();
+              setState({ kind: "idle" });
+              setMode(event.currentTarget.value === "answer" ? "answer" : "results");
+            }}
+          >
+            <option value="results">Search results</option>
+            <option value="answer">Grounded answer</option>
+          </select>
+        </label>
         <button className="primary" type="submit" disabled={!query.trim()}>
-          Search
+          {mode === "answer" ? "Find answer" : "Search"}
         </button>
       </form>
 
@@ -181,6 +352,7 @@ function WorkspaceSearch({ apiUrl, workspaceId }: { apiUrl: string; workspaceId:
             {state.message}
           </p>
         )}
+        {state.kind === "success" && state.answer && <AnswerCard answer={state.answer} />}
         {state.kind === "success" && state.results.length > 0 && (
           <ul className="searchResults" aria-label="Search results">
             {state.results.map((result) => {
@@ -207,7 +379,9 @@ function WorkspaceSearch({ apiUrl, workspaceId }: { apiUrl: string; workspaceId:
         {state.kind === "loading" ? "Searching indexed sources…" : null}
         {state.kind === "success"
           ? state.results.length === 0
-            ? "No matching sources. Try a different query or source filter."
+            ? state.answer
+              ? null
+              : "No matching sources. Try a different query or source filter."
             : `${state.results.length} ${state.results.length === 1 ? "result" : "results"}`
           : null}
       </p>

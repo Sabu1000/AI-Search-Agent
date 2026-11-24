@@ -5,6 +5,13 @@ edition = "2021"
 rust-version = "1.77.2"
 publish = false
 
+[features]
+default = ["persistent-manifest"]
+persistent-manifest = ["dep:rusqlite"]
+
+[dependencies]
+rusqlite = { version = "0.40.2", default-features = false, features = ["bundled"], optional = true }
+
 [target.'cfg(unix)'.dependencies]
 cap-fs-ext = "4.0"
 cap-std = "4.0"

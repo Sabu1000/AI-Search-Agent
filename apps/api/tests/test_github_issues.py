@@ -104,11 +104,11 @@ async def test_scans_distinct_namespaces_with_canonical_citations() -> None:
 
     documents = await scan(client(respond))
     assert [document.source_type for document in documents] == [
-        "github_issue",
-        "github_pull_request",
-        "github_issue_comment",
-        "github_issue_comment",
-        "github_review_comment",
+        "issue",
+        "pull_request",
+        "issue",
+        "pull_request",
+        "review",
     ]
     assert [document.external_id for document in documents] == [
         "github:14:123:issue:1001",

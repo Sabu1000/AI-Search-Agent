@@ -383,11 +383,16 @@ def _normalize(
                 display_name=item.author,
             ),
         )
+    source_type = (
+        "review"
+        if item.kind == "review_comment"
+        else "pull_request" if parent.kind == "pull_request" else "issue"
+    )
     return NormalizedDocument(
         external_id=f"github:{installation_id}:{repository_id}:{item.kind}:"
         f"{item.provider_id}",
         provider=Provider.GITHUB,
-        source_type=f"github_{item.kind}",
+        source_type=source_type,
         title=title,
         content=item.body or title,
         canonical_url=url,
@@ -399,6 +404,7 @@ def _normalize(
         provider_metadata={
             "repository_id": repository_id,
             "object_id": item.provider_id,
+            "discussion_kind": item.kind,
             "number": item.number,
             "state": item.state,
         },

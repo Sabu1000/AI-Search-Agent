@@ -21,6 +21,9 @@ from universal_ai_search.auth.store import SQLAlchemyAuthStore
 from universal_ai_search.config import Settings, get_settings
 from universal_ai_search.connections.crypto import LocalEnvelopeEncryption
 from universal_ai_search.connections.github import HttpGitHubAppGateway
+from universal_ai_search.connections.github_event_store import (
+    SQLAlchemyGitHubWebhookService,
+)
 from universal_ai_search.connections.github_service import GitHubConnectionService
 from universal_ai_search.connections.github_store import SQLAlchemyGitHubConnectionStore
 from universal_ai_search.connections.google import HttpGoogleGateway
@@ -88,6 +91,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         enabled=runtime_settings.google_oauth_enabled,
     )
     app.state.github_connection_service = None
+    app.state.github_webhook_service = None
+    if runtime_settings.github_app_enabled:
+        webhook_secret = (
+            runtime_settings.github_webhook_secret.get_secret_value().encode()
+        )
+        if webhook_secret:
+            if len(webhook_secret) < 32:
+                raise ValueError("GitHub webhook secret must be at least 32 bytes")
+            app.state.github_webhook_secret = webhook_secret
+            app.state.github_webhook_service = SQLAlchemyGitHubWebhookService(engine)
     if runtime_settings.github_app_enabled:
         app.state.github_connection_service = GitHubConnectionService(
             store=SQLAlchemyGitHubConnectionStore(

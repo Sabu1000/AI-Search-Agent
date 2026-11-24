@@ -47,6 +47,7 @@ class Settings(BaseSettings):
     github_client_secret: SecretStr = SecretStr("")
     github_private_key_pem: SecretStr = SecretStr("")
     github_redirect_uri: str = ""
+    github_webhook_secret: SecretStr = SecretStr("")
     web_origin: str = "http://localhost:3000"
     smtp_host: str = "localhost"
     smtp_port: int = 1025

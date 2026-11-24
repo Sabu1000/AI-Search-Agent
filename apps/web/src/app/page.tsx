@@ -2,6 +2,7 @@
 
 import { type FormEvent, useEffect, useState } from "react";
 
+import { GitHubConnect } from "./github-connect";
 import { SearchPanel } from "./search-panel";
 
 type Membership = {
@@ -218,11 +219,21 @@ export default function HomePage() {
       </section>
 
       {session?.user.email_verified && (
-        <SearchPanel
-          apiUrl={apiUrl}
-          memberships={session.memberships}
-          preferredWorkspaceId={session.preferred_workspace_id}
-        />
+        <>
+          <SearchPanel
+            apiUrl={apiUrl}
+            memberships={session.memberships}
+            preferredWorkspaceId={session.preferred_workspace_id}
+          />
+          <GitHubConnect
+            key={session.user.id}
+            apiUrl={apiUrl}
+            userId={session.user.id}
+            csrfToken={session.csrf_token}
+            memberships={session.memberships}
+            preferredWorkspaceId={session.preferred_workspace_id}
+          />
+        </>
       )}
 
       <section className="sources" aria-labelledby="source-heading">

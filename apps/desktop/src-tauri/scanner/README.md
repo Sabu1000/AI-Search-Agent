@@ -12,9 +12,8 @@ same filesystem (including the mount ID on Linux). It outputs only relative
 paths, namespaced path and file identifiers, byte sizes, timestamps, MIME
 types, SHA-256, and aggregate skip counts. It does not return raw contents or
 absolute paths. Identity survives a rename on the same filesystem; birth
-time is included where available to mitigate inode reuse. Reliable rename
-tracking on filesystems without birth time still needs a persistent local
-manifest.
+time is included where available to mitigate inode reuse. When birth time is
+unavailable, inode reuse can still make an identity ambiguous.
 
 The initial formats are UTF-8 `.md`, `.markdown`, `.txt`, and `.csv` without
 NUL bytes. Defaults always exclude dotfiles and known generated/dependency
@@ -28,8 +27,23 @@ verify content via the retained capability and reconcile changes.
 
 Unix scanning is implemented; Linux requires a kernel with `statx` mount ID
 support. Other platforms, including Windows today, fail closed. macOS
-packaging, the native picker/removal UI, SQLite, watchers, binary formats,
-credentials, and sync verification are not included.
+packaging, the native picker/removal UI, watchers, binary formats, device
+credentials, uploads, and sync verification are not included.
+
+## Local SQLite baseline
+
+The default `persistent-manifest` feature compares authoritative snapshots
+with a per-selection baseline in a bounded 64 MiB SQLite database. A trusted
+caller provides a dedicated connection to a private app-data file, outside any
+selected root. Never hand this API a database chosen by the user or a renderer.
+
+Planning is read-only. Changes are classified as additions, modifications,
+renames, or removals by namespaced identity. A plan can commit the baseline
+only after the caller confirms downstream acceptance and only while the
+saved revision and database identity still match; rejected, partial,
+cross-root, and stale input never advances it. No file contents or absolute
+paths are persisted. The store has no pending upload queue and does not
+generate, submit, or acknowledge network requests itself.
 
 From `apps/desktop/src-tauri`:
 

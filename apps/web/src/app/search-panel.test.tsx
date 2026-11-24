@@ -27,6 +27,16 @@ function search(query: string) {
   fireEvent.click(screen.getByRole("button", { name: "Search" }));
 }
 
+function ask(question: string) {
+  fireEvent.change(screen.getByRole("combobox", { name: "Mode" }), {
+    target: { value: "answer" },
+  });
+  fireEvent.change(screen.getByRole("searchbox", { name: "Search query" }), {
+    target: { value: question },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Find answer" }));
+}
+
 function response(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -179,5 +189,126 @@ describe("SearchPanel", () => {
     expect(screen.getByText(/don’t have an active workspace/i)).toBeInTheDocument();
     expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+function answerResponse(overrides: Record<string, unknown> = {}) {
+  return {
+    mode: "answer",
+    results: [result()],
+    answer: {
+      answer_markdown: "[misleading content](https://example.test)",
+      claims: [{ id: "claim-1", text: "The reviewer is **Alex**.", citation_ids: ["c1"] }],
+      citations: [
+        {
+          id: "c1",
+          claim_ids: ["claim-1"],
+          source_id: "source-one",
+          chunk_id: "chunk-one",
+          excerpt: "The approved reviewer is Alex.",
+        },
+      ],
+      insufficient_evidence: { value: false, reason: null },
+      ...overrides,
+    },
+    degradation: { semantic_search: "ok", answer_generation: "ok" },
+  };
+}
+
+describe("Grounded answers", () => {
+  it("sends a per-submission idempotency key and links claims to the exact indexed source", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(response(answerResponse()))
+      .mockResolvedValueOnce(response(answerResponse()));
+    vi.stubGlobal("fetch", fetchMock);
+    renderPanel();
+    ask("Who reviewed it?");
+    expect(await screen.findByRole("heading", { name: "Grounded answer" })).toBeInTheDocument();
+    expect(screen.getByText("The reviewer is **Alex**.")).toBeInTheDocument();
+    expect(screen.queryByText(/misleading content/)).not.toBeInTheDocument();
+    const citation = screen.getByRole("link", { name: /citation.*1/i });
+    const targetId = citation.getAttribute("href")?.slice(1);
+    expect(targetId).toBeDefined();
+    expect(document.getElementById(targetId ?? "")).toHaveTextContent("SPR design review");
+    expect(screen.getByRole("link", { name: /open cited source/i })).toHaveAttribute(
+      "href",
+      "https://docs.google.com/document/d/test/edit",
+    );
+    const first = fetchMock.mock.calls[0]?.[1];
+    const firstKey = new Headers(first?.headers).get("Idempotency-Key");
+    expect(first?.body).toBe(
+      JSON.stringify({ query: "Who reviewed it?", mode: "answer", providers: [] }),
+    );
+    expect(firstKey).toMatch(/^[a-f0-9-]{36}$/i);
+
+    fireEvent.click(screen.getByRole("button", { name: "Find answer" }));
+    await screen.findByText("The reviewer is **Alex**.");
+    const secondKey = new Headers(fetchMock.mock.calls[1]?.[1]?.headers).get("Idempotency-Key");
+    expect(secondKey).toMatch(/^[a-f0-9-]{36}$/i);
+    expect(secondKey).not.toBe(firstKey);
+  });
+
+  it("states when no grounding evidence is available", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>().mockResolvedValue(
+        response({
+          ...answerResponse({
+            claims: [],
+            citations: [],
+            insufficient_evidence: { value: true, reason: "no_authorized_results" },
+          }),
+          results: [],
+        }),
+      ),
+    );
+    renderPanel();
+    ask("Unindexed question");
+    expect(await screen.findByText(/isn’t enough indexed evidence/i)).toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "Citations" })).not.toBeInTheDocument();
+  });
+
+  it("suppresses claims when citation references do not match returned evidence", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>().mockResolvedValue(
+        response(
+          answerResponse({
+            citations: [
+              {
+                id: "c1",
+                claim_ids: ["claim-1"],
+                source_id: "source-one",
+                chunk_id: "wrong-chunk",
+                excerpt: "Unmatched evidence.",
+              },
+            ],
+          }),
+        ),
+      ),
+    );
+    renderPanel();
+    ask("Who reviewed it?");
+    expect(await screen.findByText(/cited answer is unavailable/i)).toBeInTheDocument();
+    expect(screen.queryByText("The reviewer is **Alex**.")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "SPR design review" })).toBeInTheDocument();
+  });
+
+  it("leaves matching documents available when answer generation is unavailable", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>().mockResolvedValue(
+        response({
+          ...answerResponse(),
+          degradation: { semantic_search: "ok", answer_generation: "unavailable" },
+        }),
+      ),
+    );
+    renderPanel();
+    ask("Who reviewed it?");
+    expect(await screen.findByText(/cited answer is unavailable/i)).toBeInTheDocument();
+    expect(screen.queryByText("The reviewer is **Alex**.")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /open source/i })).toBeInTheDocument();
   });
 });

@@ -11,12 +11,13 @@ use cap_std::time::SystemTime;
 use ignore::gitignore::{Gitignore, GitignoreBuilder};
 use sha2::{Digest, Sha256};
 
-use crate::{ManifestRecord, RootNamespace, ScanError, SkipCounts, Snapshot};
+use crate::{
+    permitted_path_component, ManifestRecord, RootNamespace, ScanError, SkipCounts, Snapshot,
+    MAX_ENTRIES, MAX_FILE_BYTES, MAX_PATH_BYTES,
+};
 
-const MAX_FILE_BYTES: u64 = 100_000_000;
 const MAX_IGNORE_BYTES: u64 = 16_384;
 const MAX_IGNORE_RULES: usize = 256;
-const MAX_PATH_BYTES: usize = 1024;
 const READ_BUFFER_BYTES: usize = 16_384;
 const IGNORED_DIRS: &[&str] = &[
     "node_modules",
@@ -39,7 +40,7 @@ pub(super) struct Limits {
 impl Default for Limits {
     fn default() -> Self {
         Self {
-            entries: 10_000,
+            entries: MAX_ENTRIES,
             depth: 32,
             read_bytes: 512_000_000,
         }
@@ -131,6 +132,11 @@ impl Root {
         })
     }
 
+    #[cfg(feature = "persistent-manifest")]
+    pub(super) fn scope(&self) -> [u8; 32] {
+        self.absolute_path_hash
+    }
+
     pub(super) fn scan(&self, limits: Limits) -> Result<Snapshot, ScanError> {
         let rules = self.ignore_rules()?;
         let mut scan = Scan {
@@ -153,6 +159,8 @@ impl Root {
         scan.records
             .sort_unstable_by(|a, b| a.relative_path.cmp(&b.relative_path));
         Ok(Snapshot {
+            #[cfg(feature = "persistent-manifest")]
+            root_scope: self.scope(),
             records: scan.records,
             authoritative: scan.authoritative,
             skipped: scan.skipped,
@@ -251,7 +259,7 @@ impl Scan<'_> {
                 self.skipped.excluded += 1;
                 continue;
             };
-            if spelling.starts_with('.') || !portable_name(spelling) {
+            if !permitted_path_component(spelling) {
                 self.skipped.excluded += 1;
                 continue;
             }
@@ -448,13 +456,6 @@ fn same_revision(left: &Metadata, right: &Metadata) -> bool {
         && left.mtime_nsec() == right.mtime_nsec()
         && left.ctime() == right.ctime()
         && left.ctime_nsec() == right.ctime_nsec()
-}
-
-fn portable_name(name: &str) -> bool {
-    !name.ends_with([' ', '.'])
-        && !name
-            .chars()
-            .any(|c| c.is_control() || matches!(c, '<' | '>' | ':' | '"' | '\\' | '|' | '?' | '*'))
 }
 
 fn allowed_text_type(path: &Path) -> Option<&'static str> {

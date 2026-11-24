@@ -263,7 +263,7 @@ button.primary:not(:disabled) {
 }
 
 .searchForm {
-  grid-template-columns: minmax(0, 1fr) minmax(10rem, 1fr) auto;
+  grid-template-columns: minmax(0, 1.6fr) minmax(9rem, 1fr) minmax(10rem, 1fr) auto;
   align-items: end;
 }
 
@@ -328,8 +328,83 @@ button.primary:not(:disabled) {
   white-space: nowrap;
 }
 
-@media (max-width: 700px) {
+.answerCard {
+  margin-top: 1.25rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+.answerCard h3 {
+  margin: 0 0 0.6rem;
+}
+
+.answerHint {
+  color: var(--muted);
+}
+
+.answerClaims,
+.answerCitations {
+  display: grid;
+  gap: 0.6rem;
+  padding-inline-start: 1.35rem;
+}
+
+.answerCard a {
+  color: var(--accent);
+}
+
+.answerClaims a + a {
+  margin-inline-start: 0.25rem;
+}
+
+.answerCitations blockquote {
+  margin: 0.35rem 0;
+  color: var(--muted);
+}
+
+.answerCitations li:target {
+  outline: 2px solid var(--accent);
+  outline-offset: 0.25rem;
+}
+
+@media (max-width: 840px) {
   .searchForm {
     grid-template-columns: 1fr;
   }
+}
+
+.githubConnect .workspaceSelection {
+  margin-top: 1rem;
+}
+
+.githubConnectForm {
+  max-width: 36rem;
+}
+
+.githubConnectForm textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 5rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  padding: 0.8rem;
+  background: #091612;
+  color: var(--text);
+  font: inherit;
+}
+
+.githubConnectForm .searchStatus,
+.githubConnectForm .error {
+  margin: 0;
+}
+
+.githubConnectForm .primary,
+.githubContinue {
+  justify-self: start;
+}
+
+.githubContinue {
+  color: var(--accent);
 }

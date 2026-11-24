@@ -13,7 +13,14 @@ from uas_connector_sdk.testing import FakeConnector
 
 from universal_ai_search.connections.crypto import EncryptedEnvelope
 from universal_ai_search.connections.github import GitHubAuthorizationError
+from universal_ai_search.connections.github_event_store import (
+    SQLAlchemyGitHubWebhookService,
+)
 from universal_ai_search.connections.github_store import SQLAlchemyGitHubConnectionStore
+from universal_ai_search.connections.github_webhook import (
+    GitHubWebhookHint,
+    GitHubWebhookWork,
+)
 from universal_ai_search.sync.github_repository import (
     GitHubSyncClaimError,
     GitHubSyncRepository,
@@ -201,3 +208,44 @@ async def test_git_hub_grants_are_bound_to_verified_manager_session(
         ).fetchone()
         == (1,)
     )
+
+    repository = 8 if target.repository_id == 8 else 10
+    await_conn = create_async_engine(
+        database_dsn().replace("postgresql://", "postgresql+asyncpg://"),
+        connect_args={"server_settings": {"role": "app_api"}},
+    )
+    inbox = SQLAlchemyGitHubWebhookService(await_conn)
+    delivery, payload_hash = uuid4(), secrets.token_bytes(32)
+    inflight = runtime.claim("github-test")
+    assert inflight is not None
+    current = runtime.load(inflight)
+    try:
+        for delivered_id in (delivery, delivery, uuid4()):
+            await inbox.record(
+                GitHubWebhookHint(
+                    delivery_id=delivered_id,
+                    payload_hash=payload_hash,
+                    installation_id=42,
+                    event_name="installation_repositories",
+                    action="removed",
+                    work=GitHubWebhookWork.INSTALLATION,
+                    repository_id=repository,
+                )
+            )
+        assert (
+            connection.execute(
+                """SELECT github_verified_at, github_authorization_generation
+               FROM app.source_collections WHERE id=%s""",
+                (target.collection_id,),
+            ).fetchone()
+            == (None, 2)
+        )
+        assert connection.execute(
+            "SELECT count(*) FROM app.provider_events WHERE connection_id=%s",
+            (connection_id,),
+        ).fetchone() == (1,)
+        with pytest.raises(GitHubSyncClaimError):
+            runtime.commit(inflight, current, ())
+        runtime.fail(inflight)
+    finally:
+        await await_conn.dispose()

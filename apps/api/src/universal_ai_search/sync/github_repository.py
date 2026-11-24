@@ -28,6 +28,7 @@ class GitHubSyncTarget:
     collection_id: UUID
     installation_id: int
     repository_id: int
+    authorization_generation: int = 1
 
 
 class GitHubSyncRepository:
@@ -49,7 +50,8 @@ class GitHubSyncRepository:
     ) -> GitHubSyncTarget:
         row = connection.execute(
             """SELECT collection.id, collection.provider_external_id AS repository_id,
-                      account.github_installation_id AS installation_id
+                      account.github_installation_id AS installation_id,
+                      collection.github_authorization_generation AS generation
             FROM app.jobs AS job
             JOIN app.connections AS account ON account.workspace_id = job.workspace_id
                 AND account.id = job.connection_id
@@ -79,6 +81,7 @@ class GitHubSyncRepository:
             collection_id=cast(UUID, row["id"]),
             installation_id=cast(int, row["installation_id"]),
             repository_id=int(cast(str, row["repository_id"])),
+            authorization_generation=cast(int, row["generation"]),
         )
 
     def load(self, claim: ClaimedSyncJob) -> GitHubSyncTarget:
