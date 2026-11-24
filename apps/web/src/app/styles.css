@@ -247,3 +247,89 @@ button.primary:not(:disabled) {
     grid-template-columns: 1fr;
   }
 }
+
+.searchPanel {
+  max-width: 62rem;
+  padding: clamp(1rem, 4vw, 2rem);
+  margin-bottom: 3rem;
+  border: 1px solid var(--line);
+  border-radius: 1.25rem;
+  background: var(--panel);
+}
+
+.workspaceSelection {
+  max-width: 21rem;
+  margin-bottom: 1rem;
+}
+
+.searchForm {
+  grid-template-columns: minmax(0, 1fr) minmax(10rem, 1fr) auto;
+  align-items: end;
+}
+
+.searchPanel select {
+  width: 100%;
+  min-height: 2.85rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  padding: 0.6rem 0.8rem;
+  background: #091612;
+  color: var(--text);
+  font: inherit;
+}
+
+.searchStatus {
+  color: var(--muted);
+  margin: 1rem 0 0;
+}
+
+.searchStatus:empty {
+  display: none;
+}
+
+.searchResults {
+  display: grid;
+  gap: 0.8rem;
+  padding: 0;
+  list-style: none;
+}
+
+.searchResults > li {
+  overflow-wrap: anywhere;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+}
+
+.searchResults h3 {
+  margin: 0.4rem 0;
+}
+
+.searchResults small {
+  color: var(--muted);
+}
+
+.searchResults p {
+  white-space: pre-wrap;
+  line-height: 1.55;
+}
+
+.searchResults a {
+  color: var(--accent);
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (max-width: 700px) {
+  .searchForm {
+    grid-template-columns: 1fr;
+  }
+}

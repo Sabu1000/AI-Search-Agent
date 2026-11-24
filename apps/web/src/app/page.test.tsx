@@ -18,5 +18,22 @@ describe("HomePage", () => {
     expect(screen.getByRole("tab", { name: "Sign in" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sign in" })).toBeEnabled();
     expect(screen.getByRole("tab", { name: "Create account" })).toBeInTheDocument();
+    expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
+  });
+
+  it("shows search only when a verified session is restored", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          user: { id: "a", full_name: "Sabu", email: "user@example.test", email_verified: true },
+          memberships: [{ workspace_id: "b", name: "Workspace", role: "owner", status: "active" }],
+          preferred_workspace_id: "b",
+        }),
+      }),
+    );
+    render(<HomePage />);
+    expect(await screen.findByRole("searchbox", { name: "Search query" })).toBeInTheDocument();
   });
 });

@@ -16,9 +16,11 @@ WORKDIR /app
 COPY apps/desktop/src-tauri/Cargo.toml apps/desktop/src-tauri/Cargo.lock ./
 COPY apps/desktop/src-tauri/build.rs ./build.rs
 COPY apps/desktop/src-tauri/src ./src
+COPY apps/desktop/src-tauri/scanner ./scanner
 COPY apps/desktop/src-tauri/capabilities ./capabilities
 COPY apps/desktop/src-tauri/icons ./icons
 COPY apps/desktop/src-tauri/tauri.conf.json ./tauri.conf.json
 
-RUN cargo fmt --check \
+RUN cargo fmt --all --check \
+    && cargo test --locked -p uas-desktop-scanner \
     && cargo check --locked

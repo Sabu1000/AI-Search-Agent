@@ -2,6 +2,8 @@
 
 import { type FormEvent, useEffect, useState } from "react";
 
+import { SearchPanel } from "./search-panel";
+
 type Membership = {
   workspace_id: string;
   name: string;
@@ -125,7 +127,7 @@ export default function HomePage() {
     <main>
       <nav aria-label="Primary navigation">
         <span className="brand">Universal AI Search</span>
-        <span className="stage">Authentication milestone</span>
+        <span className="stage">Private workspaces</span>
       </nav>
 
       <section className="hero authHero">
@@ -133,8 +135,7 @@ export default function HomePage() {
           <p className="eyebrow">Your knowledge. One trustworthy search.</p>
           <h1>Find the answer—and the source behind it.</h1>
           <p className="lede">
-            Create your private workspace now. Source connections and search arrive in the next
-            milestones.
+            Sign in to search data that has already been indexed in your private workspace.
           </p>
         </div>
 
@@ -216,6 +217,14 @@ export default function HomePage() {
         </div>
       </section>
 
+      {session?.user.email_verified && (
+        <SearchPanel
+          apiUrl={apiUrl}
+          memberships={session.memberships}
+          preferredWorkspaceId={session.preferred_workspace_id}
+        />
+      )}
+
       <section className="sources" aria-labelledby="source-heading">
         <div>
           <p className="eyebrow">Read-only by design</p>
@@ -225,7 +234,7 @@ export default function HomePage() {
           {sources.map((source) => (
             <li key={source}>
               {source}
-              <small>Coming next</small>
+              <small>Results appear when content is indexed</small>
             </li>
           ))}
         </ul>
