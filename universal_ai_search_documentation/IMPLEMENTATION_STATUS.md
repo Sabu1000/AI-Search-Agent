@@ -35,7 +35,7 @@ shells are never counted as finished user features.
 | `02_SYSTEM_ARCHITECTURE.md` | Complete | Partial | Local topology, schema ordering, fail-closed HTTP boundaries, workspace authentication/authorization, durable Gmail/Drive/selected-GitHub indexing, and hybrid search exist. Desktop sync, model streaming, provider management UI, and remaining product services are open. |
 | `03_SEARCH_ENGINE_DESIGN.md` | Complete | Local-index backend implemented; product phase partial | PostgreSQL exact/FTS/pgvector/trigram retrieval, typed filters, RRF, deterministic ranking, bounded extractive claims/citations, history, and safe empty answers pass unit and local PostgreSQL tests. Signed-in web results support workspace and provider filters. Production semantic/model adapters, full filter and answer UI, evaluation, and cache remain. |
 | `04_DATABASE_SCHEMA.md` | Complete | Database runtime implemented; phase partial | Alembic creates `33/33` specified tables. The runtime adds GitHub authorization and sync migrations to the prior index/Gmail/Drive claim functions and forced RLS. Compose migrates before API startup; readiness checks revision `0009_github_sync_runtime`. Seed data, backup automation, and Phase 3 review remain. |
-| `05_API_SPECIFICATION.md` | Complete | API platform and selected product routes implemented | FastAPI provides OpenAPI 3.1, strict serialization, RFC 9457 problems, signed cursors, idempotency primitives, and workspace authentication. `22/49` catalogued product operations include application and recovery auth, Google/GitHub authorization, signed GitHub webhook ingress, search, safe connection reads, and private conversation management. Rate limiting, SSE, and remaining operations are open. |
+| `05_API_SPECIFICATION.md` | Complete | API platform and selected product routes implemented | FastAPI provides OpenAPI 3.1, strict serialization, RFC 9457 problems, signed cursors, idempotency primitives, and workspace authentication. `24/49` catalogued product operations include application and recovery auth, Google/GitHub authorization, signed GitHub webhook ingress, search, safe connection reads, private conversation management, and opt-in native device registration. Rate limiting, SSE, and remaining operations are open. |
 | `06_CONNECTOR_FRAMEWORK.md` | Complete | Gmail and selected-root Drive backend phases complete; provider ecosystem partial | The GitHub backend now verifies selected-repository grants, ingests bounded repository and discussion snapshots, reconciles absence after success, and closes visibility on failed verification. Desktop has a bounded scanner core. Live provider checks, native desktop sync, Drive change polling, and shared operational controls remain. |
 | `07_INDEXING_PIPELINE.md` | Complete | Normalized text/Markdown and bounded provider extraction paths implemented | Deterministic chunking/deduplication, local embeddings, durable leases, atomic promotion, unchanged skips and deletion purging pass unit and local PostgreSQL tests. Drive PDF/DOCX/XLSX/PPTX and bounded GitHub repository/discussion data feed the index. Desktop indexing handoff and production embedding providers remain open. |
 | `08_SECURITY_AND_PRIVACY.md` | Complete | Partial controls | The threat model, data classification, tenant/cryptographic boundaries, browser/input/model defenses, audit/redaction policy, deletion/backup rules, and security release gates are implementation-ready. Existing RLS, strict API boundaries, secret validation, and containerized tests implement only part of the required controls. |
@@ -358,8 +358,11 @@ selected-root backend milestone passes its
   the visibility fence; no live GitHub App credentials were used.
 - Signed webhook ingress stores bounded, content-free replay records and
   coalesces provider reconciliation. Scope events fence in-flight snapshots
-  before they can publish. Follow-up checks remove derived content for a
-  verified App uninstall, not ambiguous repository failures. The full
+  before they can publish. Repository authority-change events target only
+  that selection; suspended workspaces cannot fetch or publish a sync.
+  Search revalidates each source/chunk pair immediately before returning it.
+  Follow-up checks remove derived content for a verified App uninstall, not
+  ambiguous repository failures. The full
   revocation and live acceptance matrix remains open.
 
 ### Signed-in web search and desktop scanner
@@ -397,8 +400,10 @@ does not verify semantic entailment. The converse/model path remains open.
 
 The desktop scanner also contains an offline Ed25519 contract for
 registration proofs and exact-byte request signatures, verified against
-cross-language fixtures. This is not server-side device registration or
-transport; those gates are open.
+cross-language fixtures. Opt-in native registration verifies a 60-second
+single-use challenge and returns an opaque credential once. It creates a
+pending local-files connection. Device heartbeat, native keychain and file
+transport remain open.
 
 ### First offline retrieval evaluation
 

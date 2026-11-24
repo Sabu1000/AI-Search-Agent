@@ -175,6 +175,7 @@ def test_every_tenant_table_has_direct_workspace_and_forced_rls(
     }:
         assert protected[table] == (True, True)
     assert protected["embedding_profiles"] == (False, False)
+    assert protected["device_registration_challenges"] == (True, True)
 
     api_policy_tables = {
         row[0]
@@ -206,6 +207,8 @@ def test_every_tenant_table_has_direct_workspace_and_forced_rls(
     }
     assert api_policy_tables >= application_policy_tables
     assert worker_policy_tables >= application_policy_tables
+    assert "device_registration_challenges" in api_policy_tables
+    assert "device_registration_challenges" not in worker_policy_tables
 
     audit_reader_policy_tables = {
         row[0]

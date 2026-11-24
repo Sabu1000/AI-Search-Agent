@@ -129,10 +129,40 @@ async def test_git_hub_grants_are_bound_to_verified_manager_session(
     ).fetchone() == (1,)
 
     runtime = GitHubSyncRepository(database_dsn())
+    connection.execute(
+        "UPDATE app.workspaces SET status = 'suspended' WHERE id = %s",
+        (workspace,),
+    )
+    connection.commit()
+    assert runtime.claim("github-test") is None
+    connection.execute(
+        "UPDATE app.workspaces SET status = 'active' WHERE id = %s",
+        (workspace,),
+    )
+    connection.commit()
     claim = runtime.claim("github-test")
     assert claim is not None
+    original_target = runtime.load(claim)
+    connection.execute(
+        """UPDATE app.workspaces SET status = 'suspended',
+           authorization_version = authorization_version + 1 WHERE id = %s""",
+        (workspace,),
+    )
+    connection.commit()
+    with pytest.raises(GitHubSyncClaimError):
+        runtime.load(claim)
+    with pytest.raises(GitHubSyncClaimError):
+        runtime.commit(claim, original_target, ())
+    connection.execute(
+        "UPDATE app.workspaces SET status = 'active' WHERE id = %s",
+        (workspace,),
+    )
+    connection.commit()
+    with pytest.raises(GitHubSyncClaimError):
+        runtime.commit(claim, original_target, ())
     target = runtime.load(claim)
     assert target.repository_id in {8, 10}
+    assert target.workspace_authorization_version == 2
     doc = await FakeConnector().normalize(
         RawItem(
             external_id="repo:1:gh-test.md",
@@ -216,6 +246,77 @@ async def test_git_hub_grants_are_bound_to_verified_manager_session(
         connect_args={"server_settings": {"role": "app_api"}},
     )
     inbox = SQLAlchemyGitHubWebhookService(await_conn)
+    # A normal event just received must not debounce the targeted scope hint.
+    try:
+        sibling_time = datetime.now(UTC)
+        connection.execute(
+            """UPDATE app.source_collections SET github_verified_at = %s
+               WHERE connection_id = %s AND id <> %s""",
+            (sibling_time, connection_id, target.collection_id),
+        )
+        connection.execute(
+            """UPDATE app.jobs SET available_at = CASE
+                   WHEN payload ->> 'collection_id' = %s
+                   THEN now() - interval '3 minutes'
+                   ELSE now() + interval '2 minutes'
+               END WHERE connection_id = %s
+                 AND job_type = 'sync' AND status = 'pending'""",
+            (str(target.collection_id), connection_id),
+        )
+        connection.commit()
+        scope_claim = runtime.claim("github-test")
+        assert scope_claim is not None
+        scope_target = runtime.load(scope_claim)
+        assert scope_target == target
+        for work, event_name, action in (
+            (GitHubWebhookWork.REPOSITORY, "push", None),
+            (GitHubWebhookWork.REPOSITORY_SCOPE, "repository", "privatized"),
+        ):
+            await inbox.record(
+                GitHubWebhookHint(
+                    delivery_id=uuid4(),
+                    payload_hash=secrets.token_bytes(32),
+                    installation_id=42,
+                    event_name=event_name,
+                    action=action,
+                    work=work,
+                    repository_id=target.repository_id,
+                )
+            )
+        assert (
+            connection.execute(
+                """SELECT github_verified_at, github_authorization_generation,
+               selected, status
+               FROM app.source_collections WHERE id = %s""",
+                (target.collection_id,),
+            ).fetchone()
+            == (None, 2, True, "active")
+        )
+        assert (
+            connection.execute(
+                """SELECT github_verified_at, github_authorization_generation
+               FROM app.source_collections WHERE connection_id = %s AND id <> %s""",
+                (connection_id, target.collection_id),
+            ).fetchone()
+            == (sibling_time, 1)
+        )
+        assert connection.execute(
+            "SELECT state FROM app.sources WHERE connection_id = %s", (connection_id,)
+        ).fetchone() == ("active",)
+        with pytest.raises(GitHubSyncClaimError):
+            runtime.commit(scope_claim, scope_target, ())
+        runtime.fail(scope_claim)
+        connection.execute(
+            """UPDATE app.jobs SET available_at = now() - interval '4 minutes'
+               WHERE job_type = 'sync' AND status = 'pending' AND connection_id = %s
+                 AND payload ->> 'collection_id' <> %s""",
+            (connection_id, str(target.collection_id)),
+        )
+        connection.commit()
+    except BaseException:
+        await await_conn.dispose()
+        raise
+
     delivery, payload_hash = uuid4(), secrets.token_bytes(32)
     inflight = runtime.claim("github-test")
     assert inflight is not None
@@ -239,12 +340,12 @@ async def test_git_hub_grants_are_bound_to_verified_manager_session(
                FROM app.source_collections WHERE id=%s""",
                 (target.collection_id,),
             ).fetchone()
-            == (None, 2)
+            == (None, 3)
         )
         assert connection.execute(
             "SELECT count(*) FROM app.provider_events WHERE connection_id=%s",
             (connection_id,),
-        ).fetchone() == (1,)
+        ).fetchone() == (3,)
         with pytest.raises(GitHubSyncClaimError):
             runtime.commit(inflight, current, ())
         runtime.fail(inflight)

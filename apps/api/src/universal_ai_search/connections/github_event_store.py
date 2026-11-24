@@ -20,7 +20,7 @@ class SQLAlchemyGitHubWebhookService:
                     text(
                         """SELECT app.record_github_webhook_hint(
                            :installation, :repository, :delivery, :event,
-                           :digest, :installation_wide)"""
+                           :digest, :installation_wide, :repository_scope)"""
                     ),
                     {
                         "installation": hint.installation_id,
@@ -30,6 +30,8 @@ class SQLAlchemyGitHubWebhookService:
                         "digest": hint.payload_hash,
                         "installation_wide": hint.work
                         is GitHubWebhookWork.INSTALLATION,
+                        "repository_scope": hint.work
+                        is GitHubWebhookWork.REPOSITORY_SCOPE,
                     },
                 )
         except SQLAlchemyError:

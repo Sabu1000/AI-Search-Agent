@@ -72,6 +72,7 @@ omit = [
   "*/universal_ai_search/auth/recovery_store.py",
   "*/universal_ai_search/connections/store.py",
   "*/universal_ai_search/conversations/repository.py",
+  "*/universal_ai_search/devices/registration_store.py",
   "*/universal_ai_search/conversations/deletion.py",
   "*/universal_ai_search/conversations/user_turn.py",
   "*/universal_ai_search/connections/query.py",

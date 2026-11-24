@@ -20,6 +20,7 @@ EXPECTED_TABLES = {
     "deletion_requests",
     "device_folders",
     "devices",
+    "device_registration_challenges",
     "document_versions",
     "embedding_profiles",
     "job_attempts",
@@ -54,7 +55,7 @@ def test_empty_database_upgrade_creates_exact_catalog(
     }
     assert tables == EXPECTED_TABLES
     assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-        "0012_password_recovery",
+        "0014_github_scope_fences",
     )
 
 
@@ -87,7 +88,7 @@ def test_upgrade_downgrade_and_reupgrade_on_isolated_database() -> None:
             count = connection.execute(
                 "SELECT count(*) FROM pg_tables WHERE schemaname = 'app'"
             ).fetchone()
-            assert count == (33,)
+            assert count == (len(EXPECTED_TABLES),)
     finally:
         with psycopg.connect(admin_dsn, autocommit=True) as admin:
             admin.execute(

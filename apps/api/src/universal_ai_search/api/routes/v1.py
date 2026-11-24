@@ -18,6 +18,7 @@ from universal_ai_search.api.routes.conversation_deletion import (
     router as conversation_delete_router,
 )
 from universal_ai_search.api.routes.conversations import router as conversation_router
+from universal_ai_search.api.routes.device_registration import router as device_router
 from universal_ai_search.api.routes.github_connections import router as github_router
 from universal_ai_search.api.routes.github_webhooks import (
     router as github_webhook_router,
@@ -38,3 +39,4 @@ router.include_router(conversation_router)
 router.include_router(conversation_delete_router)
 router.include_router(conversation_operations_router)
 router.include_router(search_router)
+router.include_router(device_router)

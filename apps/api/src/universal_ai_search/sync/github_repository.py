@@ -30,6 +30,7 @@ class GitHubSyncTarget:
     repository_id: int
     authorization_generation: int = 1
     github_app_id: int | None = None
+    workspace_authorization_version: int = 1
 
 
 class GitHubSyncRepository:
@@ -49,6 +50,16 @@ class GitHubSyncRepository:
     def _target(
         connection: psycopg.Connection[dict[str, object]], claim: ClaimedSyncJob
     ) -> GitHubSyncTarget:
+        # Serialize publication with workspace suspension/deletion. The lock
+        # is held only during database work, never across provider requests.
+        # Webhook routing uses the same workspace-before-account lock order.
+        workspace = connection.execute(
+            """SELECT authorization_version FROM app.workspaces
+               WHERE id = %s AND status = 'active' FOR SHARE""",
+            (claim.workspace_id,),
+        ).fetchone()
+        if workspace is None:
+            raise GitHubSyncClaimError
         row = connection.execute(
             """SELECT collection.id, collection.provider_external_id AS repository_id,
                       account.github_installation_id AS installation_id,
@@ -85,6 +96,9 @@ class GitHubSyncRepository:
             repository_id=int(cast(str, row["repository_id"])),
             authorization_generation=cast(int, row["generation"]),
             github_app_id=cast(int | None, row["github_app_id"]),
+            workspace_authorization_version=cast(
+                int, workspace["authorization_version"]
+            ),
         )
 
     def load(self, claim: ClaimedSyncJob) -> GitHubSyncTarget:

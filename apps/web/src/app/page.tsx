@@ -1,9 +1,10 @@
 "use client";
 
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 import { ConnectionPanel } from "./connection-panel";
 import { GitHubConnect } from "./github-connect";
+import { capturePasswordResetLink, PasswordRecovery, type RecoveryView } from "./password-recovery";
 import { SearchPanel } from "./search-panel";
 
 type Membership = {
@@ -46,8 +47,22 @@ export default function HomePage() {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [recovery, setRecovery] = useState<RecoveryView | null>(null);
+  const resetToken = useRef<string | null>(null);
+  const resetArrival = useRef<RecoveryView | null>(null);
+  const getResetToken = useCallback(() => resetToken.current, []);
 
   useEffect(() => {
+    const resetLink = capturePasswordResetLink();
+    if (resetLink) {
+      resetToken.current = resetLink.view === "reset" ? resetLink.token : null;
+      resetArrival.current = resetLink.view;
+    }
+    if (resetArrival.current) {
+      const view = resetArrival.current;
+      queueMicrotask(() => setRecovery(view));
+      return;
+    }
     const verifyToken = new URLSearchParams(window.location.search).get("verify_token");
     if (verifyToken) {
       window.history.replaceState({}, "", "/");
@@ -114,6 +129,20 @@ export default function HomePage() {
     }
   }
 
+  function showRecovery(view: RecoveryView | null) {
+    resetToken.current = null;
+    setMode("login");
+    setRecovery(view);
+    setError("");
+    setNotice("");
+  }
+
+  function finishRecovery() {
+    showRecovery(null);
+    setSession(null);
+    setNotice("Password updated. Sign in with your new password.");
+  }
+
   async function logout() {
     if (!session?.csrf_token) return;
     const response = await fetch(`${apiUrl}/v1/auth/logout`, {
@@ -142,7 +171,18 @@ export default function HomePage() {
         </div>
 
         <div className="authCard">
-          {session ? (
+          {recovery ? (
+            <PasswordRecovery
+              key={recovery}
+              apiUrl={apiUrl}
+              view={recovery}
+              getResetToken={getResetToken}
+              onLogin={() => showRecovery(null)}
+              onRequest={() => showRecovery("request")}
+              onInvalid={() => showRecovery("invalid_reset")}
+              onComplete={finishRecovery}
+            />
+          ) : session ? (
             <div className="account" aria-live="polite">
               <p className="eyebrow">Signed in</p>
               <h2>Welcome, {session.user.full_name}</h2>
@@ -208,6 +248,11 @@ export default function HomePage() {
                   {busy ? "Working…" : mode === "login" ? "Sign in" : "Create private workspace"}
                 </button>
               </form>
+              {mode === "login" && (
+                <button className="secondary" type="button" onClick={() => showRecovery("request")}>
+                  Forgot password?
+                </button>
+              )}
             </>
           )}
           {notice && <p className="notice">{notice}</p>}
@@ -219,7 +264,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {session?.user.email_verified && (
+      {!recovery && session?.user.email_verified && (
         <>
           <SearchPanel
             apiUrl={apiUrl}

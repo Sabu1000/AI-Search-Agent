@@ -8,7 +8,7 @@ from pathlib import Path
 from alembic import command
 from alembic.config import Config
 
-EXPECTED_SCHEMA_REVISION = "0012_password_recovery"
+EXPECTED_SCHEMA_REVISION = "0014_github_scope_fences"
 
 
 def build_alembic_config() -> Config:

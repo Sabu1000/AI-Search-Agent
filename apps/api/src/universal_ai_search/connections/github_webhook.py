@@ -39,6 +39,10 @@ _REPOSITORY_ACTIONS = frozenset(
         "unarchived",
     }
 )
+_REPOSITORY_SCOPE_ACTIONS = frozenset({"deleted", "transferred", "privatized"})
+_REPOSITORY_CONTENT_FIELDS = frozenset(
+    {"issue", "comment", "pull_request", "review", "ref", "ref_type"}
+)
 _ISSUE_ACTIONS = frozenset(
     {
         "closed",
@@ -88,6 +92,7 @@ class GitHubWebhookError(ValueError):
 class GitHubWebhookWork(StrEnum):
     REPOSITORY = "reconcile_repository"
     INSTALLATION = "reconcile_installation"
+    REPOSITORY_SCOPE = "reconcile_repository_scope"
 
 
 @dataclass(frozen=True, slots=True)
@@ -158,10 +163,14 @@ def verify_github_webhook(
         if event_name == "installation":
             if action not in _INSTALLATION_ACTIONS:
                 return None
+            if "repository" in payload:
+                raise ValueError
             kind = GitHubWebhookWork.INSTALLATION
         elif event_name == "installation_repositories":
             if action not in {"added", "removed"}:
                 return None
+            if "repository" in payload:
+                raise ValueError
             added = _repository_ids(payload.get("repositories_added"))
             removed = _repository_ids(payload.get("repositories_removed"))
             if added & removed:
@@ -170,6 +179,8 @@ def verify_github_webhook(
         elif event_name == "installation_target":
             if action != "renamed":
                 return None
+            if "repository" in payload:
+                raise ValueError
             kind = GitHubWebhookWork.INSTALLATION
         else:
             kind = GitHubWebhookWork.REPOSITORY
@@ -178,6 +189,12 @@ def verify_github_webhook(
                 actions, object_field = content
                 if action not in actions:
                     return None
+                if event_name == "repository" and action in _REPOSITORY_SCOPE_ACTIONS:
+                    # GitHub signs the body, not X-GitHub-Event. A re-labelled
+                    # issue/delete body must not become an authorization fence.
+                    if _REPOSITORY_CONTENT_FIELDS.intersection(payload):
+                        raise ValueError
+                    kind = GitHubWebhookWork.REPOSITORY_SCOPE
                 if object_field is not None:
                     _object_id(payload.get(object_field))
                 if event_name in {"issue_comment", "pull_request_review_comment"}:
@@ -191,7 +208,7 @@ def verify_github_webhook(
         installation = _object_id(payload.get("installation"))
         repo_id = (
             _object_id(payload.get("repository"))
-            if kind is GitHubWebhookWork.REPOSITORY
+            if kind is not GitHubWebhookWork.INSTALLATION
             else None
         )
     except (ValueError, RecursionError):

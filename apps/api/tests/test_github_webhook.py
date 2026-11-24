@@ -136,7 +136,7 @@ def test_ignores_authenticated_unknown_events_but_rejects_bad_header() -> None:
             "created",
             {"pull_request": {"id": 4}, "comment": {"id": 7}},
         ),
-        ("repository", "deleted", {}),
+        ("repository", "renamed", {}),
     ],
 )
 def test_supported_content_events(
@@ -147,6 +147,31 @@ def test_supported_content_events(
     assert hint.repository_id == 456
     assert hint.action == action
     assert hint.work is GitHubWebhookWork.REPOSITORY
+
+
+@pytest.mark.parametrize("action", ["deleted", "transferred", "privatized"])
+def test_repository_scope_changes_fence_only_the_signed_repository(action: str) -> None:
+    raw = body(
+        {"action": action, "installation": {"id": 123}, "repository": {"id": 456}}
+    )
+    hint = verify(raw, event="repository")
+    assert hint is not None
+    assert hint.work is GitHubWebhookWork.REPOSITORY_SCOPE
+    assert hint.installation_id == 123
+    assert hint.repository_id == 456
+    if action == "deleted":
+        with pytest.raises(GitHubWebhookError, match="PAYLOAD_INVALID"):
+            verify(raw, event="installation")
+    else:
+        assert verify(raw, event="installation") is None
+
+
+def test_issue_deletion_cannot_be_routed_as_repository_scope() -> None:
+    raw = body({**BASE, "action": "deleted", "issue": {"id": 4}})
+    hint = verify(raw, event="issues")
+    assert hint is not None and hint.work is GitHubWebhookWork.REPOSITORY
+    with pytest.raises(GitHubWebhookError, match="PAYLOAD_INVALID"):
+        verify(raw, event="repository")
 
 
 @pytest.mark.parametrize(

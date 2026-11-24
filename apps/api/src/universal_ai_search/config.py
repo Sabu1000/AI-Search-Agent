@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     github_webhook_secret: SecretStr = SecretStr("")
     web_origin: str = "http://localhost:3000"
     password_recovery_enabled: bool = False
+    desktop_registration_enabled: bool = False
     smtp_host: str = "localhost"
     smtp_port: int = 1025
     email_from: str = "Universal AI Search <no-reply@localhost>"

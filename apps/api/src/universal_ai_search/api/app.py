@@ -45,6 +45,10 @@ from universal_ai_search.connections.service import GoogleConnectionService
 from universal_ai_search.connections.store import SQLAlchemyGoogleConnectionStore
 from universal_ai_search.conversations.deletion import ConversationDeletionStore
 from universal_ai_search.conversations.repository import ConversationRepository
+from universal_ai_search.devices.registration import DeviceRegistrationService
+from universal_ai_search.devices.registration_store import (
+    SQLAlchemyDeviceRegistrationStore,
+)
 from universal_ai_search.search.repository import SearchRepository
 from universal_ai_search.search.service import SearchService
 
@@ -120,6 +124,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         service
     )
     app.state.search_service = SearchService(SearchRepository(engine))
+    app.state.device_registration_service = None
+    if runtime_settings.desktop_registration_enabled:
+        registration_key = runtime_settings.auth_hash_key.get_secret_value().encode()
+        app.state.device_registration_service = DeviceRegistrationService(
+            SQLAlchemyDeviceRegistrationStore(engine, audit_key=registration_key),
+            hash_key=registration_key,
+        )
     app.state.connection_query_reader = SQLAlchemyConnectionQueryReader(engine)
     app.state.connection_cursor_signer = CursorSigner(
         runtime_settings.cursor_signing_key.get_secret_value().encode()

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from time import monotonic
 from uuid import UUID, uuid4
 
@@ -90,6 +90,36 @@ class SearchService:
             result_count=len(ranked),
             context_tokens=sum(item.candidate.token_count for item in context),
         )
+        if ranked:
+            eligible = await self._repository.revalidate_candidates(
+                workspace_id=workspace_id,
+                user_id=user_id,
+                authorization_version=authorization_version,
+                plan=plan,
+                pairs=tuple(
+                    (item.candidate.source_id, item.candidate.chunk_id)
+                    for item in ranked
+                ),
+            )
+            # This is the last storage read before handing off any payload text.
+            # Preserve the ranking score but never reuse stale source metadata
+            # or context from a pair that failed this fresh authorization check.
+            ranked = tuple(
+                RankedChunk(
+                    replace(current, raw_score=item.candidate.raw_score), item.score
+                )
+                for item in ranked
+                if (
+                    current := eligible.get(
+                        (item.candidate.source_id, item.candidate.chunk_id)
+                    )
+                )
+                is not None
+            )
+            context = build_context(ranked) if plan.mode == "answer" else ()
+            if plan.mode == "answer" and not context:
+                insufficient = "no_authorized_results"
+            total_ms = round((monotonic() - started) * 1000)
         return SearchOutput(
             request_id,
             plan.mode,
